@@ -37,11 +37,12 @@ export const useAuth = () => {
 
         const inAuthGroup = (segments as any)[0] === '(auth)';
         const isLandingPage = (segments as any).length === 0 || (segments as any)[0] === '' || (segments as any)[0] === undefined;
+        const isResetPassword = (segments as any).includes('reset-password');
 
         if (!session && !inAuthGroup && !isLandingPage) {
             // User is not signed in and not in the auth group or landing page, redirect to login
             router.replace('/(auth)/login');
-        } else if (session && inAuthGroup) {
+        } else if (session && inAuthGroup && !isResetPassword) {
             // User is signed in and in the auth group, redirect to home
             router.replace('/(tabs)');
         }

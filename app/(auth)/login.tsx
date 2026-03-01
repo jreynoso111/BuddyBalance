@@ -2,31 +2,46 @@ import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { ShieldCheck, Mail, Lock } from 'lucide-react-native';
 
 export default function LoginScreen() {
+    const router = useRouter();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const onSignIn = async () => {
+        if (!email.trim() || !password) {
+            Alert.alert('Error', 'Ingresa tu correo y contraseña.');
+            return;
+        }
+
         setLoading(true);
         const { error } = await supabase.auth.signInWithPassword({
-            email,
+            email: email.trim(),
             password,
         });
-        if (error) Alert.alert('Error', error.message);
+        if (error) Alert.alert('Error', 'Credenciales inválidas.');
         setLoading(false);
     };
 
     const onSignUp = async () => {
+        if (!email.trim() || !password) {
+            Alert.alert('Error', 'Ingresa tu correo y contraseña.');
+            return;
+        }
+
         setLoading(true);
         const { error } = await supabase.auth.signUp({
-            email,
+            email: email.trim(),
             password,
         });
-        if (error) Alert.alert('Error', 'Check your email for confirmation!');
+        if (error) {
+            Alert.alert('Error', 'No se pudo crear la cuenta. Verifica los datos e intenta de nuevo.');
+        } else {
+            Alert.alert('Cuenta creada', 'Revisa tu correo para confirmar tu cuenta.');
+        }
         setLoading(false);
     };
 
@@ -76,6 +91,14 @@ export default function LoginScreen() {
                                 />
                             </RNView>
                         </RNView>
+
+                        <TouchableOpacity
+                            onPress={() => router.push('/forgot-password')}
+                            disabled={loading}
+                            style={styles.forgotButton}
+                        >
+                            <Text style={styles.forgotButtonText}>¿Olvidaste tu contraseña?</Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             onPress={onSignIn}
@@ -186,6 +209,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 8,
         backgroundColor: 'transparent',
+    },
+    forgotButton: {
+        alignSelf: 'flex-end',
+        marginTop: -4,
+        marginBottom: 8,
+        paddingVertical: 6,
+    },
+    forgotButtonText: {
+        color: '#6366F1',
+        fontSize: 13,
+        fontWeight: '700',
     },
     buttonText: {
         color: '#fff',

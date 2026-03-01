@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, Image, View as RNView } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
@@ -29,7 +29,7 @@ export default function NewLoanScreen() {
     const [reminderInterval, setReminderInterval] = useState('1');
     const [loading, setLoading] = useState(false);
     const [image, setImage] = useState<string | null>(null);
-    let base64String: string | null = null;
+    const base64StringRef = useRef<string | null>(null);
 
     useFocusEffect(
         useCallback(() => {
@@ -58,6 +58,15 @@ export default function NewLoanScreen() {
         setContacts(newContacts);
     };
 
+    const getDefaultDueDate = () => {
+        const oneMonthLater = new Date();
+        oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+        const year = oneMonthLater.getFullYear();
+        const month = String(oneMonthLater.getMonth() + 1).padStart(2, '0');
+        const day = String(oneMonthLater.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const pickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -69,16 +78,24 @@ export default function NewLoanScreen() {
 
         if (!result.canceled) {
             setImage(result.assets[0].uri);
-            base64String = result.assets[0].base64 || null;
+            base64StringRef.current = result.assets[0].base64 || null;
         }
     };
 
     const onSave = async () => {
-        if (category === 'money' && !amount) {
+        if (loading) return;
+
+        const parsedAmount = parseFloat(amount);
+        const normalizedItemName = itemName.trim();
+        const normalizedDueDate = dueDate.trim();
+        const effectiveDueDate = normalizedDueDate || getDefaultDueDate();
+        const parsedReminderInterval = parseInt(reminderInterval) || 1;
+
+        if (category === 'money' && (!amount || Number.isNaN(parsedAmount) || parsedAmount <= 0)) {
             Alert.alert('Error', 'Amount is required for money loans');
             return;
         }
-        if (category === 'item' && !itemName) {
+        if (category === 'item' && !normalizedItemName) {
             Alert.alert('Error', 'Item name is required');
             return;
         }
@@ -86,82 +103,135 @@ export default function NewLoanScreen() {
             Alert.alert('Error', 'Contact is required');
             return;
         }
-
-        setLoading(true);
-        let evidenceUrl = null;
-
-        if (image && base64String) {
-            const fileName = `${user?.id}/${Date.now()}.jpg`;
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('receipts')
-                .upload(fileName, decode(base64String), {
-                    contentType: 'image/jpeg',
-                });
-
-            if (uploadError) {
-                Alert.alert('Upload Error', uploadError.message);
-                setLoading(false);
-                return;
-            }
-            evidenceUrl = fileName;
+        if (normalizedDueDate && Number.isNaN(new Date(normalizedDueDate).getTime())) {
+            Alert.alert('Error', 'Due date must be a valid date (YYYY-MM-DD)');
+            return;
         }
 
-        const selectedContact = contacts.find(c => c.id === contactId);
-        const targetUserId = selectedContact?.target_user_id;
+        setLoading(true);
+        try {
+            let evidenceUrl: string | null = null;
 
-        const { data: newLoan, error } = await supabase.from('loans').insert([
-            {
-                user_id: user?.id,
+            if (image && base64StringRef.current) {
+                const fileName = `${user?.id}/${Date.now()}.jpg`;
+                const { error: uploadError } = await supabase.storage
+                    .from('receipts')
+                    .upload(fileName, decode(base64StringRef.current), {
+                        contentType: 'image/jpeg',
+                    });
+
+                if (uploadError) throw uploadError;
+                evidenceUrl = fileName;
+            }
+
+            const selectedContact = contacts.find(c => c.id === contactId);
+            const targetUserId = selectedContact?.target_user_id;
+            if (!user?.id) {
+                throw new Error('You need to be signed in before saving a transaction.');
+            }
+
+            const payload: Record<string, any> = {
+                user_id: user.id,
                 contact_id: contactId,
-                target_user_id: targetUserId,
-                amount: category === 'money' ? parseFloat(amount) : null,
+                target_user_id: targetUserId || null,
+                amount: category === 'money' ? parsedAmount : null,
                 currency: category === 'money' ? currency : null,
                 category,
-                item_name: category === 'item' ? itemName.trim() : null,
+                item_name: category === 'item' ? normalizedItemName : null,
                 type,
                 description: description.trim() || null,
-                due_date: dueDate || null,
+                due_date: effectiveDueDate,
                 status: 'active',
                 validation_status: targetUserId ? 'pending' : 'none',
                 evidence_url: evidenceUrl,
                 reminder_frequency: reminderFrequency,
-                reminder_interval: parseInt(reminderInterval) || 1,
-            },
-        ]).select().single();
+                reminder_interval: parsedReminderInterval,
+            };
 
-        if (!error && targetUserId && newLoan) {
-            // Create P2P request
-            await supabase.from('p2p_requests').insert([
-                {
-                    type: 'loan_validation',
-                    loan_id: newLoan.id,
-                    from_user_id: user?.id,
-                    to_user_id: targetUserId,
-                    message: `New ${category} ${type === 'lent' ? 'lent' : 'borrowed'} transaction recorded with you.`,
-                    status: 'pending',
-                },
-            ]);
-        }
+            let newLoan: any = null;
+            let insertError: any = null;
+            const maxAttempts = 4;
 
-        if (dueDate && !error) {
-            const selectedContact = contacts.find(c => c.id === contactId);
-            await scheduleLoanReminder(
-                newLoan.id,
-                selectedContact?.name || 'Someone',
-                category === 'money' ? parseFloat(amount) : 0,
-                dueDate,
-                category,
-                reminderFrequency,
-                parseInt(reminderInterval) || 1
-            );
-        }
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const { data, error } = await supabase
+                    .from('loans')
+                    .insert([payload])
+                    .select()
+                    .single();
 
-        if (error) {
-            Alert.alert('Error', error.message);
-        } else {
-            router.back();
+                if (!error) {
+                    newLoan = data;
+                    insertError = null;
+                    break;
+                }
+
+                insertError = error;
+                const message = (error.message || '').toLowerCase();
+
+                // Compatibility fallback for schemas that require amount/currency on item loans.
+                if (category === 'item' && message.includes('null value in column') && message.includes('amount')) {
+                    payload.amount = 0;
+                    continue;
+                }
+                if (category === 'item' && message.includes('null value in column') && message.includes('currency')) {
+                    payload.currency = currency || 'USD';
+                    continue;
+                }
+
+                // Compatibility fallback for enum/value mismatches in reminder settings.
+                if (message.includes('invalid input value for enum') && message.includes('none')) {
+                    payload.reminder_frequency = null;
+                    continue;
+                }
+
+                // Compatibility fallback if optional columns are not present in an older schema.
+                const missingColumnMatch = /column ["']?([a-z0-9_]+)["']? does not exist/i.exec(error.message || '');
+                if (missingColumnMatch?.[1]) {
+                    delete payload[missingColumnMatch[1]];
+                    continue;
+                }
+
+                break;
+            }
+
+            if (insertError) throw insertError;
+            if (!newLoan?.id) {
+                throw new Error('Transaction could not be created. Please try again.');
+            }
+
+            if (targetUserId && newLoan) {
+                // Create P2P request
+                await supabase.from('p2p_requests').insert([
+                    {
+                        type: 'loan_validation',
+                        loan_id: newLoan.id,
+                        from_user_id: user?.id,
+                        to_user_id: targetUserId,
+                        message: `New ${category} ${type === 'lent' ? 'lent' : 'borrowed'} transaction recorded with you.`,
+                        status: 'pending',
+                    },
+                ]);
+            }
+
+            if (reminderFrequency !== 'none' && newLoan) {
+                await scheduleLoanReminder(
+                    newLoan.id,
+                    selectedContact?.name || 'Someone',
+                    category === 'money' ? parsedAmount : 0,
+                    effectiveDueDate,
+                    category,
+                    reminderFrequency,
+                    parsedReminderInterval
+                );
+            }
+
+            router.replace('/(tabs)');
+        } catch (error: any) {
+            console.error('new-loan save failed:', error);
+            Alert.alert('Error', error?.message || 'Could not save transaction. Please try again.');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     const colorScheme = useColorScheme() || 'light';
@@ -184,7 +254,12 @@ export default function NewLoanScreen() {
                 style={{ flex: 1 }}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
             >
-                <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+                <ScrollView
+                    contentContainerStyle={styles.scroll}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="always"
+                    keyboardDismissMode="on-drag"
+                >
                     <Card style={styles.topCard}>
                         <View style={styles.categoryToggleContainer}>
                             <TouchableOpacity

@@ -1,10 +1,7 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { supabase } from './supabase';
 import { Alert } from 'react-native';
-
-const documentDirectory = FileSystem.documentDirectory;
-const EncodingType = FileSystem.EncodingType;
 
 export const exportLoansToCSV = async (userId: string) => {
     try {

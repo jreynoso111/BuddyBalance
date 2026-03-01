@@ -81,7 +81,9 @@ function RootLayoutNav() {
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/forgot-password" options={{ title: 'Recover Password' }} />
+          <Stack.Screen name="(auth)/reset-password" options={{ title: 'Reset Password' }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="loan/[id]" options={{ title: 'Loan Details' }} />
           <Stack.Screen name="new-loan" options={{ title: 'New Loan' }} />
