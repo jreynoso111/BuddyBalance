@@ -44,15 +44,16 @@ export default function NewContactScreen() {
 
         setLoading(true);
 
-        // 1. Discover target_user_id
+        // 1. Discover target_user_id via RPC (avoids exposing full profiles table)
         let targetUserId = null;
-        if (email.trim()) {
-            const { data } = await supabase.from('profiles').select('id').eq('email', email.trim().toLowerCase()).single();
-            if (data) targetUserId = data.id;
-        }
-        if (!targetUserId && phone.trim()) {
-            const { data } = await supabase.from('profiles').select('id').eq('phone', phone.trim()).single();
-            if (data) targetUserId = data.id;
+        if (email.trim() || phone.trim()) {
+            const { data, error: lookupError } = await supabase.rpc('find_profile_match', {
+                p_email: email.trim() || null,
+                p_phone: phone.trim() || null,
+            });
+            if (!lookupError && data) {
+                targetUserId = data;
+            }
         }
 
         if (id) {
