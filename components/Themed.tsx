@@ -2,7 +2,8 @@
  * Learn more about Light and Dark modes:
  * https://docs.expo.io/guides/color-schemes/
  */
-import { Text as DefaultText, View as DefaultView } from 'react-native';
+import { Text as DefaultText, View as DefaultView, ViewStyle } from 'react-native';
+import { AnimatedBackground } from './AnimatedBackground';
 
 import { useColorScheme } from './useColorScheme';
 
@@ -42,4 +43,40 @@ export function View(props: ViewProps) {
   const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'background');
 
   return <DefaultView style={[{ backgroundColor }, style]} {...otherProps} />;
+}
+
+export function Card(props: ViewProps) {
+  const { style, lightColor, darkColor, ...otherProps } = props;
+  const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'card');
+  const borderColor = useThemeColor({ light: lightColor, dark: darkColor }, 'border');
+
+  return (
+    <DefaultView
+      style={[
+        {
+          backgroundColor,
+          borderRadius: 20,
+          padding: 16,
+          borderWidth: 1,
+          borderColor,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 12,
+          elevation: 2,
+        },
+        style
+      ]}
+      {...otherProps}
+    />
+  );
+}
+
+export function Screen(props: ViewProps) {
+  const { style, ...otherProps } = props;
+  return (
+    <AnimatedBackground>
+      <DefaultView style={[{ flex: 1, backgroundColor: 'transparent' }, style]} {...otherProps} />
+    </AnimatedBackground>
+  );
 }

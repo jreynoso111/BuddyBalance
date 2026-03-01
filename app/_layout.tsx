@@ -5,7 +5,20 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import { useAuth } from '@/hooks/useAuth';
+import { registerForPushNotificationsAsync } from '@/services/notificationService';
+import * as Notifications from 'expo-notifications';
 import { useColorScheme } from '@/components/useColorScheme';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -36,6 +49,10 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
+
   if (!loaded) {
     return null;
   }
@@ -43,15 +60,35 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
+import { AnimatedBackground } from '@/components/AnimatedBackground';
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  useAuth(); // Handle redirects based on auth state
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+      <AnimatedBackground>
+        <Stack
+          screenOptions={{
+            headerTransparent: true,
+            headerTintColor: colorScheme === 'dark' ? '#F1F5F9' : '#0F172A',
+            headerTitleStyle: {
+              fontWeight: '800',
+              fontSize: 18,
+            },
+            headerTitleAlign: 'center',
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="loan/[id]" options={{ title: 'Loan Details' }} />
+          <Stack.Screen name="new-loan" options={{ title: 'New Loan' }} />
+          <Stack.Screen name="new-contact" options={{ title: 'New Contact' }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        </Stack>
+      </AnimatedBackground>
     </ThemeProvider>
   );
 }
