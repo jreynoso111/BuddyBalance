@@ -91,6 +91,7 @@ const styles = StyleSheet.create({
   },
   centered: {
     justifyContent: 'center',
+    flexDirection: 'column',
   },
   markWrap: {
     justifyContent: 'center',
@@ -137,6 +138,8 @@ const styles = StyleSheet.create({
   },
   wordmarkCentered: {
     alignItems: 'center',
+    marginLeft: 0,
+    marginTop: 14,
   },
   wordmark: {
     color: BRAND_COLORS.ink,

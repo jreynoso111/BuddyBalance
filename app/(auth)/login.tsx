@@ -135,7 +135,9 @@ export default function LoginScreen() {
             >
                 <RNView style={styles.content}>
                     <RNView style={styles.header}>
-                        <BrandLogo size="lg" showWordmark centered />
+                        <TouchableOpacity activeOpacity={0.8} onPress={() => router.replace('/')}>
+                            <BrandLogo size="lg" showWordmark centered />
+                        </TouchableOpacity>
                         <Text style={styles.subtitle}>Securely manage what's yours.</Text>
                     </RNView>
 
@@ -245,6 +247,7 @@ const styles = StyleSheet.create({
     header: {
         alignItems: 'center',
         marginBottom: 40,
+        marginTop: 100,
         backgroundColor: 'transparent',
     },
     subtitle: {
