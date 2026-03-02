@@ -9,7 +9,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { DEFAULT_USER_PREFERENCES, getOrCreateUserPreferences } from '@/services/userPreferences';
 
 export default function SettingsScreen() {
-    const { user } = useAuthStore();
+    const { user, role } = useAuthStore();
     const router = useRouter();
     const [prefs, setPrefs] = React.useState(DEFAULT_USER_PREFERENCES);
 
@@ -53,6 +53,15 @@ export default function SettingsScreen() {
         { icon: FileOutput, label: 'Export Data (CSV)', sub: 'Share report', onPress: handleExport },
         { icon: CircleHelp, label: 'Help & Support', sub: 'FAQ & contact', onPress: () => router.push('/help-support') },
     ];
+
+    if (role === 'admin') {
+        menuItems.unshift({
+            icon: Shield,
+            label: 'Admin Dashboard',
+            sub: 'Manage users and platform data',
+            onPress: () => router.push('/(admin)' as any)
+        });
+    }
 
     return (
         <Screen style={styles.container}>

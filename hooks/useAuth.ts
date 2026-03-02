@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const LAST_PROTECTED_PATH_KEY = 'last_protected_path';
 
 export const useAuth = () => {
-    const { setSession, setUser, setInitialized, session, initialized } = useAuthStore();
+    const { setSession, setUser, setRole, setInitialized, session, initialized } = useAuthStore();
     const pathname = usePathname();
     const router = useRouter();
     const segments = useSegments();
@@ -18,6 +18,14 @@ export const useAuth = () => {
             const { data: { session } } = await supabase.auth.getSession();
             setSession(session);
             setUser(session?.user ?? null);
+
+            if (session?.user?.id) {
+                const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                setRole(data?.role ?? 'user');
+            } else {
+                setRole(null);
+            }
+
             setInitialized(true);
         };
 
@@ -25,9 +33,16 @@ export const useAuth = () => {
 
         // 2. Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            (_event, session) => {
+            async (_event, session) => {
                 setSession(session);
                 setUser(session?.user ?? null);
+
+                if (session?.user?.id) {
+                    const { data } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                    setRole(data?.role ?? 'user');
+                } else {
+                    setRole(null);
+                }
             }
         );
 
@@ -83,9 +98,9 @@ export const useAuth = () => {
                 return;
             }
 
-            if (!session && !inAuthRoute && !isLandingPage) {
-                // User is not signed in and not in the auth group or landing page, redirect to login
-                router.replace('/(auth)/login');
+            if (!session && !inAuthRoute && !isLandingPage && !isEphemeralFormRoute) {
+                // User is not signed in and not in the auth group or landing page, redirect to landing page
+                router.replace('/');
             } else if (session && inAuthRoute && !isResetPassword) {
                 // User is signed in and in the auth group, redirect to home
                 router.replace('/(tabs)');

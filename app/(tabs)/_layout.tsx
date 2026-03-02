@@ -46,9 +46,9 @@ export default function TabLayout() {
           fontWeight: 'bold',
         },
         headerLeft: () => (
-          <View style={{ marginLeft: 16 }}>
+          <TouchableOpacity style={{ marginLeft: 16 }} onPress={() => goToTab('home')}>
             <BrandLogo size="sm" showTagline={false} showWordmark={false} />
-          </View>
+          </TouchableOpacity>
         ),
         headerRight: () => (
           <View style={styles.headerNav}>

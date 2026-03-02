@@ -1,4 +1,4 @@
-export const BRAND_NAME = 'I GOT U';
+export const BRAND_NAME = 'I Got You';
 export const BRAND_TAGLINE = 'Lending made simple, secure, and human.';
 
 export const BRAND_COLORS = {
