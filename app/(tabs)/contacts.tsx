@@ -1,17 +1,69 @@
 import React, { useState } from 'react';
-import { StyleSheet, FlatList, TouchableOpacity, View as RNView, TextInput, useWindowDimensions } from 'react-native';
+import { StyleSheet, FlatList, TouchableOpacity, View as RNView, TextInput, useWindowDimensions, Modal, ScrollView } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { UserPlus, Search, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { UserPlus, Search, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getCurrencySymbol } from '@/constants/Currencies';
+
+type ContactLoan = {
+  id: string;
+  amount: number | null;
+  type: 'lent' | 'borrowed';
+  contact_id: string;
+  category: 'money' | 'item';
+  status: string;
+  item_name: string | null;
+  due_date: string | null;
+  currency: string | null;
+  created_at: string;
+  remaining?: number;
+};
+
+type ContactPayment = {
+  id: string;
+  amount: number | null;
+  loan_id: string;
+  payment_date: string | null;
+  payment_method: 'money' | 'item' | null;
+  note: string | null;
+  returned_item_name: string | null;
+  created_at: string;
+};
+
+type ContactHistoryEvent = {
+  id: string;
+  loanId: string;
+  occurredAt: string;
+  title: string;
+  subtitle: string;
+  value?: string;
+  valueColor?: string;
+};
+
+type ContactItem = {
+  id: string;
+  name: string;
+  target_user_id?: string | null;
+  link_status?: 'private' | 'pending' | 'accepted' | null;
+  phone?: string | null;
+  email?: string | null;
+  social_network?: string | null;
+  notes?: string | null;
+  balance: number;
+  itemsOwed: number;
+  activeLoansList: ContactLoan[];
+  historyEntries: ContactHistoryEvent[];
+};
 
 export default function ContactsScreen() {
   const { user } = useAuthStore();
-  const [contacts, setContacts] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
+  const [selectedHistoryContact, setSelectedHistoryContact] = useState<{ name: string; events: ContactHistoryEvent[] } | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -25,14 +77,13 @@ export default function ContactsScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchContacts();
-    }, [user])
+      void fetchContacts();
+    }, [user?.id])
   );
 
   const fetchContacts = async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
-    // Fetch contacts
     const { data: contactsData } = await supabase
       .from('contacts')
       .select('*')
@@ -45,74 +96,99 @@ export default function ContactsScreen() {
       return;
     }
 
-    // Fetch all active/partial loans for balance and items calculation
-    const { data: loansData } = await supabase
+    const { data: allLoansData } = await supabase
       .from('loans')
-      .select('id, amount, type, contact_id, category, status, item_name, due_date')
+      .select('id, amount, type, contact_id, category, status, item_name, due_date, currency, created_at')
       .eq('user_id', user.id)
-      .in('status', ['active', 'partial'])
       .is('deleted_at', null);
 
-    // Fetch payments for those loans
-    let paymentsData: any[] = [];
-    if (loansData && loansData.length > 0) {
-      const loanIds = loansData.map((l: any) => l.id);
+    const allLoans = (allLoansData || []) as ContactLoan[];
+    let paymentsData: ContactPayment[] = [];
+
+    if (allLoans.length > 0) {
+      const loanIds = allLoans.map((loan) => loan.id);
       const { data: pData } = await supabase
         .from('payments')
-        .select('amount, loan_id')
+        .select('id, amount, loan_id, payment_date, payment_method, note, returned_item_name, created_at')
         .in('loan_id', loanIds);
-      paymentsData = pData || [];
+
+      paymentsData = (pData || []) as ContactPayment[];
     }
 
-    const contactsWithBalance = contactsData.map((contact: any) => {
-      let balance = 0; // positive means they owe user, negative means user owes them
+    const paymentsByLoan = new Map<string, ContactPayment[]>();
+    paymentsData.forEach((payment) => {
+      const current = paymentsByLoan.get(payment.loan_id) || [];
+      current.push(payment);
+      paymentsByLoan.set(payment.loan_id, current);
+    });
+
+    const contactsWithSummary = contactsData.map((contact: any) => {
+      let balance = 0;
       let itemsOwed = 0;
-      let activeLoansList: any[] = [];
 
-      const contactLoans = loansData?.filter((l: any) => l.contact_id === contact.id) || [];
+      const contactLoans = allLoans.filter((loan) => loan.contact_id === contact.id);
+      const activeLoansList = contactLoans
+        .filter((loan) => loan.status === 'active' || loan.status === 'partial')
+        .map((loan) => {
+          if (loan.category === 'money') {
+            const loanPayments = paymentsByLoan.get(loan.id) || [];
+            const totalPaid = loanPayments.reduce((acc, payment) => {
+              const paymentAmount = Number(payment.amount || 0);
+              return payment.payment_method === 'money' && Number.isFinite(paymentAmount)
+                ? acc + paymentAmount
+                : acc;
+            }, 0);
+            const remaining = Math.max(Number(loan.amount || 0) - totalPaid, 0);
 
-      contactLoans.forEach((loan: any) => {
-        if (loan.category === 'money') {
-          const loanPayments = paymentsData.filter((p: any) => p.loan_id === loan.id);
-          const totalPaid = loanPayments.reduce((acc: number, p: any) => acc + Number(p.amount), 0);
-          const remaining = Number(loan.amount) - totalPaid;
+            if (loan.type === 'lent') {
+              balance += remaining;
+            } else if (loan.type === 'borrowed') {
+              balance -= remaining;
+            }
 
-          if (loan.type === 'lent') {
-            balance += remaining;
-          } else if (loan.type === 'borrowed') {
-            balance -= remaining;
+            return { ...loan, remaining };
           }
-          activeLoansList.push({ ...loan, remaining });
-        } else {
-          // Object item
+
           if (loan.type === 'lent') {
             itemsOwed += 1;
           } else if (loan.type === 'borrowed') {
             itemsOwed -= 1;
           }
-          activeLoansList.push(loan);
-        }
-      });
+
+          return loan;
+        });
 
       return {
         ...contact,
         balance,
         itemsOwed,
-        activeLoansList
-      };
+        activeLoansList,
+        historyEntries: buildContactHistory(contactLoans, paymentsByLoan),
+      } as ContactItem;
     });
 
-    setContacts(contactsWithBalance);
+    setContacts(contactsWithSummary);
   };
 
-  const filteredContacts = contacts.filter(contact =>
+  const filteredContacts = contacts.filter((contact) =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (contact.phone && contact.phone.includes(searchQuery)) ||
     (contact.email && contact.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const openHistoryModal = (contact: ContactItem) => {
+    setSelectedHistoryContact({
+      name: contact.name,
+      events: contact.historyEntries,
+    });
+  };
+
+  const closeHistoryModal = () => {
+    setSelectedHistoryContact(null);
+  };
+
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} safeAreaEdges={['left', 'right', 'bottom']}>
       <RNView style={[styles.searchWrapper, { paddingHorizontal: horizontalPadding, paddingTop: isTablet ? 24 : 20 }]}>
         <View style={[styles.searchContainer, maxContentWidth ? { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' } : null]}>
           <Search size={20} color="#94A3B8" />
@@ -129,12 +205,14 @@ export default function ContactsScreen() {
       <FlatList
         data={filteredContacts}
         keyExtractor={(item) => item.id}
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
         contentContainerStyle={[
           styles.listContent,
           {
             paddingHorizontal: horizontalPadding,
             paddingBottom: listBottomPadding,
-          }
+          },
         ]}
         ListEmptyComponent={
           <Card style={[styles.emptyCard, maxContentWidth ? { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' } : null]}>
@@ -143,94 +221,188 @@ export default function ContactsScreen() {
         }
         renderItem={({ item }) => {
           const isExpanded = expandedContactId === item.id;
-          const hasDebt = item.balance !== 0 || item.itemsOwed !== 0;
+          const summaryTone = getSummaryTone(item.balance, item.itemsOwed);
+          const compactDetails = getCompactDetails(item);
+          const recentHistory = item.historyEntries.slice(0, 3);
 
           return (
             <RNView
               style={[
                 styles.contactItemWrapper,
-                maxContentWidth ? { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' } : null
+                maxContentWidth ? { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' } : null,
               ]}
             >
-              <TouchableOpacity activeOpacity={0.8} onPress={() => router.push({ pathname: '/new-contact', params: { id: item.id } })}>
-                <Card style={[styles.contactItem, isExpanded && { borderBottomWidth: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setExpandedContactId(isExpanded ? null : item.id)}>
+                <Card style={[styles.contactItem, isExpanded && styles.contactItemExpanded]}>
                   <RNView style={styles.avatar}>
-                    <Text style={styles.avatarText}>{item.name[0].toUpperCase()}</Text>
+                    <Text style={styles.avatarText}>{item.name[0]?.toUpperCase()}</Text>
                   </RNView>
+
                   <RNView style={styles.contactInfo}>
-                    <Text style={styles.contactName}>{item.name}</Text>
-                    <Text style={styles.contactDetail}>{item.phone || item.email || 'No details'}</Text>
+                    <RNView style={styles.contactNameRow}>
+                      <Text style={styles.contactName}>{item.name}</Text>
+                      {item.link_status === 'accepted' ? (
+                        <RNView style={[styles.contactLinkBadge, styles.contactLinkBadgeAccepted]}>
+                          <Text style={[styles.contactLinkBadgeText, styles.contactLinkBadgeTextAccepted]}>Linked</Text>
+                        </RNView>
+                      ) : item.link_status === 'pending' ? (
+                        <RNView style={[styles.contactLinkBadge, styles.contactLinkBadgePending]}>
+                          <Text style={[styles.contactLinkBadgeText, styles.contactLinkBadgeTextPending]}>Pending</Text>
+                        </RNView>
+                      ) : null}
+                    </RNView>
+                    <Text style={styles.contactDetail}>{item.phone || item.email || item.social_network || 'Tap to view details and history'}</Text>
                   </RNView>
 
-                  {hasDebt && (
-                    <RNView style={{ alignItems: 'flex-end', justifyContent: 'center', marginRight: 12 }}>
-                      {item.balance !== 0 && (
-                        <RNView style={{ alignItems: 'flex-end' }}>
-                          <Text style={{ fontSize: 16, fontWeight: '700', color: item.balance > 0 ? '#10B981' : '#EF4444' }}>
-                            {item.balance > 0 ? '+' : '-'}${Math.abs(item.balance).toLocaleString()}
-                          </Text>
-                          {item.itemsOwed === 0 && (
-                            <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>
-                              {item.balance > 0 ? 'Owes you' : 'You owe'}
-                            </Text>
-                          )}
-                        </RNView>
-                      )}
+                  <RNView style={styles.summaryColumn}>
+                    <Text style={[styles.summaryValue, summaryTone === 'positive' ? styles.summaryPositive : summaryTone === 'negative' ? styles.summaryNegative : styles.summaryNeutral]}>
+                      {getPrimarySummary(item.balance, item.itemsOwed)}
+                    </Text>
+                    <Text style={styles.summaryLabel}>{getSecondarySummary(item.balance, item.itemsOwed, item.activeLoansList.length)}</Text>
+                  </RNView>
 
-                      {item.itemsOwed !== 0 && (
-                        <RNView style={{ alignItems: 'flex-end', marginTop: 2 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '700', color: item.itemsOwed > 0 ? '#10B981' : '#EF4444' }}>
-                            {Math.abs(item.itemsOwed)} item{Math.abs(item.itemsOwed) !== 1 ? 's' : ''}
-                          </Text>
-                          <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>
-                            {item.itemsOwed > 0 ? 'Owes you' : 'You owe'}
-                          </Text>
-                        </RNView>
-                      )}
-                    </RNView>
-                  )}
-
-                  {item.activeLoansList?.length > 0 && (
-                    <TouchableOpacity
-                      style={{ padding: 8 }}
-                      onPress={() => setExpandedContactId(isExpanded ? null : item.id)}
-                    >
-                      {isExpanded ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
-                    </TouchableOpacity>
-                  )}
+                  <RNView style={styles.chevronButton}>
+                    {isExpanded ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
+                  </RNView>
                 </Card>
               </TouchableOpacity>
 
-              {isExpanded && item.activeLoansList?.length > 0 && (
-                <Card style={{ marginTop: -16, borderTopLeftRadius: 0, borderTopRightRadius: 0, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 16, paddingBottom: 16 }}>
-                  {item.activeLoansList.map((loan: any, idx: number) => (
-                    <RNView key={loan.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: idx === item.activeLoansList.length - 1 ? 0 : 1, borderBottomColor: '#F1F5F9', paddingHorizontal: 16 }}>
-                      <RNView style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, color: '#0F172A', fontWeight: '600' }}>
-                          {loan.category === 'money' ? 'Money' : loan.item_name}
-                        </Text>
-                        {loan.due_date && (
-                          <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                            {loan.category === 'money' ? 'Due: ' : 'Expected: '}{loan.due_date.split('T')[0]}
-                          </Text>
-                        )}
-                      </RNView>
-                      <RNView style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
-                        {loan.category === 'money' ? (
-                          <Text style={{ fontSize: 14, fontWeight: '700', color: loan.type === 'lent' ? '#10B981' : '#EF4444' }}>
-                            ${loan.remaining?.toLocaleString()}
-                          </Text>
-                        ) : (
-                          <Text style={{ fontSize: 14, fontWeight: '700', color: loan.type === 'lent' ? '#10B981' : '#EF4444' }}>
-                            Active
-                          </Text>
-                        )}
-                        <Text style={{ fontSize: 11, color: '#94A3B8' }}>
-                          {loan.type === 'lent' ? 'Lent' : 'Borrowed'}
-                        </Text>
-                      </RNView>
+              {isExpanded && (
+                <Card style={styles.expandedCard}>
+                  <RNView style={styles.expandedHeaderRow}>
+                    <Text style={styles.expandedSectionTitle}>Contact snapshot</Text>
+                    <TouchableOpacity
+                      style={styles.inlineLinkButton}
+                      onPress={() => router.push({ pathname: '/new-contact', params: { id: item.id } })}
+                    >
+                      <Text style={styles.inlineLinkText}>Edit contact</Text>
+                    </TouchableOpacity>
+                  </RNView>
+
+                  {compactDetails.length > 0 ? (
+                    <RNView style={styles.detailChipsRow}>
+                      {compactDetails.map((detail) => (
+                        <RNView key={`${item.id}-${detail.label}`} style={styles.detailChip}>
+                          <Text style={styles.detailChipLabel}>{detail.label}</Text>
+                          <Text style={styles.detailChipValue} numberOfLines={1}>{detail.value}</Text>
+                        </RNView>
+                      ))}
                     </RNView>
-                  ))}
+                  ) : (
+                    <Text style={styles.emptyInlineText}>No extra details saved for this contact yet.</Text>
+                  )}
+
+                  {item.notes ? (
+                    <RNView style={styles.noteCard}>
+                      <Text style={styles.noteLabel}>Notes</Text>
+                      <Text style={styles.noteText} numberOfLines={3}>{item.notes}</Text>
+                    </RNView>
+                  ) : null}
+
+                  <RNView style={styles.expandedHeaderRow}>
+                    <Text style={styles.expandedSectionTitle}>Recent activity</Text>
+                    {item.historyEntries.length > 0 ? (
+                      <TouchableOpacity style={styles.inlineLinkButton} onPress={() => openHistoryModal(item)}>
+                        <Text style={styles.inlineLinkText}>View history</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </RNView>
+
+                  {recentHistory.length === 0 ? (
+                    <Text style={styles.emptyInlineText}>No activity recorded with this contact yet.</Text>
+                  ) : (
+                    <RNView style={styles.activityList}>
+                      {recentHistory.map((event, index) => (
+                        <TouchableOpacity
+                          key={event.id}
+                          activeOpacity={0.85}
+                          style={[styles.activityRow, index === recentHistory.length - 1 && styles.activityRowLast]}
+                          onPress={() => router.push(`/loan/${event.loanId}`)}
+                        >
+                          <RNView style={styles.activityCopy}>
+                            <Text style={styles.activityTitle}>{event.title}</Text>
+                            <Text style={styles.activitySubtitle}>{event.subtitle}</Text>
+                          </RNView>
+                          <RNView style={styles.activityRight}>
+                            {event.value ? <Text style={[styles.activityValue, event.valueColor ? { color: event.valueColor } : null]}>{event.value}</Text> : null}
+                            <Text style={styles.activityDate}>{formatActivityDate(event.occurredAt)}</Text>
+                          </RNView>
+                        </TouchableOpacity>
+                      ))}
+                    </RNView>
+                  )}
+
+                  <RNView style={styles.expandedHeaderRow}>
+                    <Text style={styles.expandedSectionTitle}>Open records</Text>
+                    <Text style={styles.sectionMeta}>{item.activeLoansList.length}</Text>
+                  </RNView>
+
+                  {item.activeLoansList.length === 0 ? (
+                    <Text style={styles.emptyInlineText}>Nothing open with this contact right now.</Text>
+                  ) : (
+                    item.activeLoansList.map((loan, idx) => (
+                      <RNView
+                        key={loan.id}
+                        style={[
+                          styles.openRecordRow,
+                          idx === item.activeLoansList.length - 1 && styles.openRecordRowLast,
+                        ]}
+                      >
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => router.push(`/loan/${loan.id}`)}
+                        >
+                          <RNView style={styles.openRecordContent}>
+                            <RNView style={styles.openRecordCopy}>
+                              <Text style={styles.openRecordTitle}>
+                                {loan.category === 'money' ? 'Money record' : loan.item_name || 'Item record'}
+                              </Text>
+                              {loan.due_date ? (
+                                <Text style={styles.openRecordMeta}>
+                                  {loan.category === 'money' ? 'Due' : 'Expected'} {formatSimpleDate(loan.due_date)}
+                                </Text>
+                              ) : (
+                                <Text style={styles.openRecordMeta}>No due date</Text>
+                              )}
+                              <Text style={styles.openRecordHint}>Tap to open details</Text>
+                            </RNView>
+                            <RNView style={styles.openRecordRight}>
+                              {loan.category === 'money' ? (
+                                <Text style={[styles.openRecordValue, loan.type === 'lent' ? styles.summaryPositive : styles.summaryNegative]}>
+                                  {getCurrencySymbol(loan.currency || 'USD')}{Math.round(Number(loan.remaining || 0)).toLocaleString()}
+                                </Text>
+                              ) : (
+                                <Text style={styles.openRecordValue}>Active</Text>
+                              )}
+                              <Text style={styles.openRecordType}>{loan.type === 'lent' ? 'Lent' : 'Borrowed'}</Text>
+                            </RNView>
+                          </RNView>
+                        </TouchableOpacity>
+
+                        {loan.category === 'money' && (
+                          <RNView style={styles.recordActionRow}>
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              onPress={() =>
+                                router.push({
+                                  pathname: '/payment',
+                                  params: {
+                                    loanId: String(loan.id),
+                                    remaining: String(Math.max(Number(loan.remaining) || 0, 0)),
+                                    currency: String(loan.currency || 'USD'),
+                                    category: String(loan.category || 'money'),
+                                  },
+                                })
+                              }
+                              style={styles.recordActionButton}
+                            >
+                              <Text style={styles.recordActionText}>Add payment</Text>
+                            </TouchableOpacity>
+                          </RNView>
+                        )}
+                      </RNView>
+                    ))
+                  )}
                 </Card>
               )}
             </RNView>
@@ -245,14 +417,190 @@ export default function ContactsScreen() {
           {
             right: horizontalPadding,
             bottom: fabBottomOffset,
-          }
+          },
         ]}
         onPress={() => router.push('/new-contact')}
       >
         <UserPlus color="#fff" size={28} />
       </TouchableOpacity>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={!!selectedHistoryContact}
+        onRequestClose={closeHistoryModal}
+      >
+        <RNView style={styles.modalOverlay}>
+          <Card style={styles.modalCard}>
+            <RNView style={styles.modalHeader}>
+              <RNView style={styles.modalHeaderCopy}>
+                <Text style={styles.modalTitle}>{selectedHistoryContact?.name || 'Contact'} history</Text>
+                <Text style={styles.modalSubtitle}>Tap an event to open the related record.</Text>
+              </RNView>
+              <TouchableOpacity onPress={closeHistoryModal} style={styles.modalCloseButton}>
+                <X size={20} color="#0F172A" />
+              </TouchableOpacity>
+            </RNView>
+
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+              {selectedHistoryContact?.events.length ? (
+                selectedHistoryContact.events.map((event, index) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    activeOpacity={0.85}
+                    style={[styles.historyRow, index === selectedHistoryContact.events.length - 1 && styles.historyRowLast]}
+                    onPress={() => {
+                      closeHistoryModal();
+                      router.push(`/loan/${event.loanId}`);
+                    }}
+                  >
+                    <RNView style={styles.activityCopy}>
+                      <Text style={styles.activityTitle}>{event.title}</Text>
+                      <Text style={styles.activitySubtitle}>{event.subtitle}</Text>
+                    </RNView>
+                    <RNView style={styles.activityRight}>
+                      {event.value ? <Text style={[styles.activityValue, event.valueColor ? { color: event.valueColor } : null]}>{event.value}</Text> : null}
+                      <Text style={styles.activityDate}>{formatActivityDate(event.occurredAt)}</Text>
+                    </RNView>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.emptyInlineText}>No history yet for this contact.</Text>
+              )}
+            </ScrollView>
+          </Card>
+        </RNView>
+      </Modal>
     </Screen>
   );
+}
+
+function buildContactHistory(loans: ContactLoan[], paymentsByLoan: Map<string, ContactPayment[]>) {
+  const events: ContactHistoryEvent[] = [];
+
+  loans.forEach((loan) => {
+    events.push({
+      id: `loan-${loan.id}`,
+      loanId: loan.id,
+      occurredAt: loan.created_at,
+      title: getLoanCreatedTitle(loan),
+      subtitle: loan.due_date ? `Due ${formatSimpleDate(loan.due_date)}` : 'Record created without a due date',
+      value: loan.category === 'money'
+        ? `${loan.type === 'lent' ? '+' : '-'}${formatMoneyValue(loan.amount, loan.currency)}`
+        : loan.item_name || 'Item',
+      valueColor: loan.category === 'money'
+        ? loan.type === 'lent' ? '#10B981' : '#EF4444'
+        : '#6366F1',
+    });
+
+    const loanPayments = [...(paymentsByLoan.get(loan.id) || [])].sort(
+      (a, b) => getTimestamp(b.payment_date || b.created_at) - getTimestamp(a.payment_date || a.created_at)
+    );
+
+    loanPayments.forEach((payment) => {
+      const occurredAt = payment.payment_date || payment.created_at;
+      const moneyAmount = Number(payment.amount || 0);
+      const hasMoneyAmount = payment.payment_method === 'money' && Number.isFinite(moneyAmount);
+
+      events.push({
+        id: `payment-${payment.id}`,
+        loanId: loan.id,
+        occurredAt,
+        title: payment.payment_method === 'item'
+          ? 'Item return logged'
+          : loan.type === 'lent'
+            ? 'Payment logged'
+            : 'Repayment logged',
+        subtitle: payment.note?.trim()
+          ? payment.note.trim()
+          : payment.payment_method === 'item'
+            ? payment.returned_item_name || 'Item handoff recorded'
+            : 'Payment added to this shared record',
+        value: hasMoneyAmount
+          ? `${loan.type === 'lent' ? '+' : '-'}${formatMoneyValue(payment.amount, loan.currency)}`
+          : payment.returned_item_name || 'Item',
+        valueColor: hasMoneyAmount
+          ? loan.type === 'lent' ? '#10B981' : '#EF4444'
+          : '#6366F1',
+      });
+    });
+  });
+
+  return events.sort((a, b) => getTimestamp(b.occurredAt) - getTimestamp(a.occurredAt));
+}
+
+function getCompactDetails(contact: ContactItem) {
+  return [
+    contact.phone ? { label: 'Phone', value: contact.phone } : null,
+    contact.email ? { label: 'Email', value: contact.email } : null,
+    contact.social_network ? { label: 'Social', value: contact.social_network } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+}
+
+function getPrimarySummary(balance: number, itemsOwed: number) {
+  if (balance !== 0) {
+    return `${balance > 0 ? '+' : '-'}$${Math.abs(Math.round(balance)).toLocaleString()}`;
+  }
+
+  if (itemsOwed !== 0) {
+    return `${Math.abs(itemsOwed)} item${Math.abs(itemsOwed) === 1 ? '' : 's'}`;
+  }
+
+  return 'No balance';
+}
+
+function getSecondarySummary(balance: number, itemsOwed: number, openCount: number) {
+  if (balance > 0) return 'Owes you';
+  if (balance < 0) return 'You owe';
+  if (itemsOwed > 0) return 'Items owed to you';
+  if (itemsOwed < 0) return 'Items you owe';
+  return openCount > 0 ? `${openCount} open record${openCount === 1 ? '' : 's'}` : 'No open records';
+}
+
+function getSummaryTone(balance: number, itemsOwed: number) {
+  if (balance > 0 || itemsOwed > 0) return 'positive';
+  if (balance < 0 || itemsOwed < 0) return 'negative';
+  return 'neutral';
+}
+
+function getLoanCreatedTitle(loan: ContactLoan) {
+  if (loan.category === 'item') {
+    return loan.type === 'lent' ? 'Item record created' : 'Borrowed item record created';
+  }
+
+  return loan.type === 'lent' ? 'Money record created' : 'Borrowed money record created';
+}
+
+function getTimestamp(value?: string | null) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function formatSimpleDate(value?: string | null) {
+  if (!value) return 'No date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.split('T')[0];
+  }
+
+  return date.toLocaleDateString();
+}
+
+function formatActivityDate(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
+}
+
+function formatMoneyValue(amount: number | null, currency: string | null) {
+  const symbol = getCurrencySymbol(currency || 'USD');
+  const numericAmount = Number(amount || 0);
+  return `${symbol}${Math.abs(Math.round(numericAmount)).toLocaleString()}`;
 }
 
 const styles = StyleSheet.create({
@@ -289,6 +637,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
+  contactItemExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
+  },
   avatar: {
     width: 48,
     height: 48,
@@ -306,16 +659,291 @@ const styles = StyleSheet.create({
   contactInfo: {
     flex: 1,
     backgroundColor: 'transparent',
+    paddingRight: 10,
+  },
+  contactNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
   },
   contactName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#0F172A',
   },
+  contactLinkBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  contactLinkBadgeAccepted: {
+    backgroundColor: '#ECFDF5',
+  },
+  contactLinkBadgePending: {
+    backgroundColor: '#FEF3C7',
+  },
+  contactLinkBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  contactLinkBadgeTextAccepted: {
+    color: '#047857',
+  },
+  contactLinkBadgeTextPending: {
+    color: '#B45309',
+  },
   contactDetail: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
+    marginTop: 3,
+  },
+  summaryColumn: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    marginRight: 10,
+  },
+  summaryValue: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  summaryPositive: {
+    color: '#10B981',
+  },
+  summaryNegative: {
+    color: '#EF4444',
+  },
+  summaryNeutral: {
+    color: '#64748B',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '700',
     marginTop: 2,
+  },
+  chevronButton: {
+    width: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  expandedCard: {
+    marginTop: -16,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 18,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+  },
+  expandedHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  expandedSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  sectionMeta: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  inlineLinkButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  inlineLinkText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#6366F1',
+  },
+  detailChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  detailChip: {
+    minWidth: '30%',
+    maxWidth: '100%',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  detailChipLabel: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  detailChipValue: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  noteCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  noteLabel: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  noteText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#334155',
+  },
+  activityList: {
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  activityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+    backgroundColor: 'transparent',
+  },
+  activityRowLast: {
+    borderBottomWidth: 0,
+  },
+  activityCopy: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  activitySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  activityRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    minWidth: 92,
+  },
+  activityValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  activityDate: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  openRecordRow: {
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderRadius: 16,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  openRecordRowLast: {
+    marginBottom: 0,
+  },
+  openRecordContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    backgroundColor: 'transparent',
+  },
+  openRecordCopy: {
+    flex: 1,
+    paddingRight: 12,
+    backgroundColor: 'transparent',
+  },
+  openRecordTitle: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '700',
+  },
+  openRecordMeta: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 3,
+  },
+  openRecordHint: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 5,
+  },
+  openRecordRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  openRecordValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  openRecordType: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  recordActionRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    backgroundColor: 'transparent',
+  },
+  recordActionButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recordActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyCard: {
     alignItems: 'center',
@@ -326,6 +954,72 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     color: '#94A3B8',
+  },
+  emptyInlineText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginBottom: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    maxHeight: '82%',
+    paddingTop: 18,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    backgroundColor: 'transparent',
+  },
+  modalHeaderCopy: {
+    flex: 1,
+    paddingRight: 12,
+    backgroundColor: 'transparent',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  modalScroll: {
+    flexGrow: 0,
+  },
+  modalScrollContent: {
+    paddingBottom: 8,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    backgroundColor: 'transparent',
+  },
+  historyRowLast: {
+    borderBottomWidth: 0,
   },
   fab: {
     position: 'absolute',

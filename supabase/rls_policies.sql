@@ -137,6 +137,57 @@ with check (
   )
 );
 
+create or replace function public.generate_friend_code()
+returns text
+language plpgsql
+set search_path = public
+as $$
+declare
+  candidate text;
+begin
+  loop
+    candidate := upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8));
+    exit when not exists (
+      select 1
+      from public.profiles p
+      where p.friend_code = candidate
+    );
+  end loop;
+
+  return candidate;
+end;
+$$;
+
+create or replace function public.ensure_my_friend_code()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  insert into public.profiles (id, friend_code)
+  values (auth.uid(), public.generate_friend_code())
+  on conflict (id) do update
+    set friend_code = coalesce(nullif(trim(public.profiles.friend_code), ''), public.generate_friend_code());
+
+  select p.friend_code
+    into next_code
+  from public.profiles p
+  where p.id = auth.uid();
+
+  return next_code;
+end;
+$$;
+
+revoke all on function public.ensure_my_friend_code() from public;
+grant execute on function public.ensure_my_friend_code() to authenticated;
+
 create or replace function public.find_profile_match(p_email text default null, p_phone text default null)
 returns uuid
 language plpgsql
@@ -172,6 +223,26 @@ $$;
 revoke all on function public.find_profile_match(text, text) from public;
 grant execute on function public.find_profile_match(text, text) to authenticated;
 
+create or replace function public.find_profile_by_friend_code(p_friend_code text)
+returns table(id uuid, full_name text, email text)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    p.id,
+    coalesce(nullif(trim(p.full_name), ''), p.email, 'Friend') as full_name,
+    p.email
+  from public.profiles p
+  where auth.uid() is not null
+    and p.id <> auth.uid()
+    and upper(trim(coalesce(p.friend_code, ''))) = upper(trim(coalesce(p_friend_code, '')))
+  limit 1;
+$$;
+
+revoke all on function public.find_profile_by_friend_code(text) from public;
+grant execute on function public.find_profile_by_friend_code(text) to authenticated;
+
 -- 8) Storage bucket policies for receipts: path must start with "<auth.uid()>/"
 drop policy if exists receipts_select_own on storage.objects;
 create policy receipts_select_own on storage.objects
@@ -206,6 +277,45 @@ create policy receipts_delete_own on storage.objects
 for delete to authenticated
 using (
   bucket_id = 'receipts'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+-- 9) Storage bucket policies for avatars: authenticated users can upload only to their own folder
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do update
+set public = excluded.public;
+
+drop policy if exists avatars_select_authenticated on storage.objects;
+create policy avatars_select_authenticated on storage.objects
+for select to authenticated
+using (bucket_id = 'avatars');
+
+drop policy if exists avatars_insert_own on storage.objects;
+create policy avatars_insert_own on storage.objects
+for insert to authenticated
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists avatars_update_own on storage.objects;
+create policy avatars_update_own on storage.objects
+for update to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists avatars_delete_own on storage.objects;
+create policy avatars_delete_own on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'avatars'
   and (storage.foldername(name))[1] = auth.uid()::text
 );
 

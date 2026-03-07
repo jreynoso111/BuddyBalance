@@ -1,51 +1,109 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View as RNView } from 'react-native';
 import { Stack } from 'expo-router';
-import { Screen, Text } from '@/components/Themed';
+import { Screen, Card, Text } from '@/components/Themed';
+
+const FAQ_ITEMS = [
+  {
+    question: 'How do I create a new record?',
+    answer:
+      'Add or pick a contact first, then use the "+" button from Home. You can choose a money record or an item record and save who shared what, how much, and when it should come back.',
+  },
+  {
+    question: 'How do I add a payment or mark something as returned?',
+    answer:
+      'Open the record details screen and use "Add payment" for money or "Mark as Returned" for items. Payments are logged manually so the history stays clear even if the real transfer happened outside the app.',
+  },
+  {
+    question: 'What does "Adjust total" do?',
+    answer:
+      'Adjust total changes the original amount of the record without deleting the payments already logged below. If the record is shared with the other person, the action becomes "Suggest new total" so they can confirm it.',
+  },
+  {
+    question: 'Where can I see the history with one contact?',
+    answer:
+      'Go to Contacts and tap the contact row to expand it. You will see a compact snapshot, recent activity, open records, and a "View history" button for the full timeline with that person.',
+  },
+  {
+    question: 'Does the app move real money?',
+    answer:
+      'No. I GOT YOU is only a shared memory and tracking app for people who lend money or items between friends and family. Real transfers still happen outside the app and are recorded here afterward.',
+  },
+  {
+    question: 'Why do I still need confirmations?',
+    answer:
+      'Confirmations help when a record or payment is shared with the other person. They are there to avoid misunderstandings, not to act like a bank workflow.',
+  },
+  {
+    question: 'Can I export my records?',
+    answer:
+      'Yes. Go to Settings and use "Export Data (CSV)" to export your records, payments, and contacts.',
+  },
+] as const;
 
 export default function FAQScreen() {
-    return (
-        <Screen style={styles.container}>
-            <Stack.Screen options={{ title: 'Frequently Asked Questions' }} />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <Text style={styles.content}>
-                    <Text style={styles.heading}>How do I create a new lend/borrow entry?</Text>{'\n'}
-                    First, make sure you have added a contact in the "Contacts" tab. Then, go to the Home tab, tap on the "+" button, select the contact, choose whether it's a Money or Item entry, and fill in the details.{'\n\n'}
+  return (
+    <Screen style={styles.container}>
+      <Stack.Screen options={{ title: 'Frequently Asked Questions' }} />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Card style={styles.introCard}>
+          <Text style={styles.introTitle}>Current guide</Text>
+          <Text style={styles.introText}>
+            This help section is kept aligned with the current app behavior, especially around contacts, payments, shared confirmations, and record adjustments.
+          </Text>
+        </Card>
 
-                    <Text style={styles.heading}>Can I track borrowed or lent items?</Text>{'\n'}
-                    Yes! During the entry creation process, change the entry type from "Current Money" to "Objects". You can then specify the name of the item instead of an amount.{'\n\n'}
-
-                    <Text style={styles.heading}>How do I register a partial payment?</Text>{'\n'}
-                    Navigate to the specific record details page, and tap the "Register Payment" button. You can enter the exact amount paid. The app will automatically update the remaining balance of the record.{'\n\n'}
-
-                    <Text style={styles.heading}>Does the app actually move real money?</Text>{'\n'}
-                    No. "I GOT YOU" is strictly a ledger tool designed to help you organize and remember who owes what. All actual payments must be done outside the app (e.g., cash, bank transfer) and recorded manually in the app.{'\n\n'}
-
-                    <Text style={styles.heading}>Can I export my data?</Text>{'\n'}
-                    Yes, you can export your data in CSV format from the Settings tab under the "Data Exporter" section. You can export lend/borrow records, payments, and contacts.
-                </Text>
-            </ScrollView>
-        </Screen>
-    );
+        {FAQ_ITEMS.map((item) => (
+          <Card key={item.question} style={styles.faqCard}>
+            <Text style={styles.question}>{item.question}</Text>
+            <Text style={styles.answer}>{item.answer}</Text>
+          </Card>
+        ))}
+      </ScrollView>
+    </Screen>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 24,
-        paddingTop: 120,
-        paddingBottom: 40,
-    },
-    heading: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#0F172A',
-    },
-    content: {
-        fontSize: 14,
-        lineHeight: 24,
-        color: '#334155',
-    },
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingTop: 120,
+    paddingBottom: 40,
+  },
+  introCard: {
+    padding: 20,
+    marginBottom: 16,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  introTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#312E81',
+    marginBottom: 8,
+  },
+  introText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#4338CA',
+  },
+  faqCard: {
+    padding: 18,
+    marginBottom: 12,
+  },
+  question: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  answer: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#475569',
+  },
 });

@@ -6,7 +6,8 @@ import { Stack, useRouter } from 'expo-router';
 import { Mail, Lock } from 'lucide-react-native';
 import { BrandLogo } from '@/components/BrandLogo';
 import { GoogleLogo } from '@/components/GoogleLogo';
-import { signInWithGoogle } from '@/services/oauth';
+import { waitForAuthSession } from '@/services/authSession';
+import { getGoogleOAuthUnavailableReason, isGoogleOAuthEnabledForBuild, signInWithGoogle } from '@/services/oauth';
 
 type FeedbackTone = 'error' | 'success' | 'info';
 
@@ -16,6 +17,8 @@ export default function LoginScreen() {
     const [password, setPassword] = useState('');
     const [authAction, setAuthAction] = useState<'sign_in' | 'google' | null>(null);
     const [feedback, setFeedback] = useState<{ tone: FeedbackTone; text: string } | null>(null);
+    const googleEnabledForBuild = isGoogleOAuthEnabledForBuild();
+    const googleUnavailableReason = getGoogleOAuthUnavailableReason();
 
     const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -75,13 +78,19 @@ export default function LoginScreen() {
         try {
             setFeedback(null);
             setAuthAction('sign_in');
-            const { error } = await withTimeout(supabase.auth.signInWithPassword({
+            const { data, error } = await withTimeout(supabase.auth.signInWithPassword({
                 email: normalizedEmail,
                 password,
             }));
 
             if (error) {
                 showMessage('Sign in failed', mapAuthError(error.message), 'error');
+                return;
+            }
+
+            const session = data.session ?? await waitForAuthSession();
+            if (!session) {
+                showMessage('Sign in failed', 'Your session did not finish loading. Please try again.', 'error');
                 return;
             }
 
@@ -96,6 +105,10 @@ export default function LoginScreen() {
 
     const onGoogleSignIn = async () => {
         if (authAction) return;
+        if (googleUnavailableReason) {
+            showMessage('Unavailable in Expo Go', googleUnavailableReason, 'info');
+            return;
+        }
 
         try {
             setFeedback(null);
@@ -188,14 +201,28 @@ export default function LoginScreen() {
                             <Text style={styles.buttonText}>{authAction === 'sign_in' ? 'SIGNING IN...' : 'Sign In'}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={onGoogleSignIn}
-                            disabled={!!authAction}
-                            style={styles.googleButton}
-                        >
-                            <GoogleLogo />
-                            <Text style={styles.googleButtonText}>{authAction === 'google' ? 'CONNECTING TO GOOGLE...' : 'Continue with Google'}</Text>
-                        </TouchableOpacity>
+                        {googleEnabledForBuild ? (
+                            <>
+                                <TouchableOpacity
+                                    onPress={onGoogleSignIn}
+                                    disabled={!!authAction}
+                                    style={[styles.googleButton, googleUnavailableReason && styles.googleButtonUnavailable]}
+                                >
+                                    <GoogleLogo />
+                                    <Text style={styles.googleButtonText}>
+                                        {authAction === 'google'
+                                            ? 'CONNECTING TO GOOGLE...'
+                                            : googleUnavailableReason
+                                                ? 'Google Sign In Requires App Build'
+                                                : 'Continue with Google'}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {googleUnavailableReason ? (
+                                    <Text style={styles.googleHintText}>{googleUnavailableReason}</Text>
+                                ) : null}
+                            </>
+                        ) : null}
 
                         <TouchableOpacity
                             onPress={() => router.push('/(auth)/register')}
@@ -320,10 +347,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 10,
     },
+    googleButtonUnavailable: {
+        backgroundColor: '#F8FAFC',
+        borderColor: '#CBD5E1',
+    },
     googleButtonText: {
         color: '#0F172A',
         fontSize: 14,
         fontWeight: '700',
+    },
+    googleHintText: {
+        marginTop: 8,
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#64748B',
+        textAlign: 'center',
     },
     forgotButton: {
         alignSelf: 'flex-end',

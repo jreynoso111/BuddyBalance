@@ -6,8 +6,9 @@ import { ArrowLeft, Lock, Mail, User } from 'lucide-react-native';
 import { Card, Screen, Text } from '@/components/Themed';
 import { BrandLogo } from '@/components/BrandLogo';
 import { GoogleLogo } from '@/components/GoogleLogo';
+import { waitForAuthSession } from '@/services/authSession';
 import { supabase } from '@/services/supabase';
-import { signInWithGoogle } from '@/services/oauth';
+import { getGoogleOAuthUnavailableReason, isGoogleOAuthEnabledForBuild, signInWithGoogle } from '@/services/oauth';
 
 type FeedbackTone = 'error' | 'success' | 'info';
 type RegisterStep = 'details' | 'verify';
@@ -24,6 +25,8 @@ export default function RegisterScreen() {
     const [verifyingCode, setVerifyingCode] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
     const [feedback, setFeedback] = useState<{ tone: FeedbackTone; text: string } | null>(null);
+    const googleEnabledForBuild = isGoogleOAuthEnabledForBuild();
+    const googleUnavailableReason = getGoogleOAuthUnavailableReason();
 
     const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -213,6 +216,12 @@ export default function RegisterScreen() {
                 }
             }
 
+            const session = await waitForAuthSession();
+            if (!session) {
+                showMessage('Account setup failed', 'Your session did not finish loading. Please try signing in.', 'error');
+                return;
+            }
+
             showMessage('Account created', 'Email verified. Your account is ready.', 'success');
             router.replace('/(tabs)');
         } catch (error: any) {
@@ -224,6 +233,10 @@ export default function RegisterScreen() {
 
     const onContinueWithGoogle = async () => {
         if (busy) return;
+        if (googleUnavailableReason) {
+            showMessage('Unavailable in Expo Go', googleUnavailableReason, 'info');
+            return;
+        }
 
         try {
             setFeedback(null);
@@ -389,14 +402,32 @@ export default function RegisterScreen() {
                             </>
                         )}
 
-                        <TouchableOpacity
-                            onPress={onContinueWithGoogle}
-                            disabled={busy}
-                            style={[styles.googleButton, busy && styles.googleButtonDisabled]}
-                        >
-                            <GoogleLogo />
-                            <Text style={styles.googleButtonText}>{googleLoading ? 'CONNECTING TO GOOGLE...' : 'Continue with Google'}</Text>
-                        </TouchableOpacity>
+                        {googleEnabledForBuild ? (
+                            <>
+                                <TouchableOpacity
+                                    onPress={onContinueWithGoogle}
+                                    disabled={busy}
+                                    style={[
+                                        styles.googleButton,
+                                        busy && styles.googleButtonDisabled,
+                                        googleUnavailableReason && styles.googleButtonUnavailable,
+                                    ]}
+                                >
+                                    <GoogleLogo />
+                                    <Text style={styles.googleButtonText}>
+                                        {googleLoading
+                                            ? 'CONNECTING TO GOOGLE...'
+                                            : googleUnavailableReason
+                                                ? 'Google Sign In Requires App Build'
+                                                : 'Continue with Google'}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {googleUnavailableReason ? (
+                                    <Text style={styles.googleHintText}>{googleUnavailableReason}</Text>
+                                ) : null}
+                            </>
+                        ) : null}
 
                         <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.secondaryButton} disabled={busy}>
                             <Text style={styles.secondaryButtonText}>Already have an account? Sign In</Text>
@@ -528,10 +559,21 @@ const styles = StyleSheet.create({
     googleButtonDisabled: {
         opacity: 0.75,
     },
+    googleButtonUnavailable: {
+        backgroundColor: '#F8FAFC',
+        borderColor: '#CBD5E1',
+    },
     googleButtonText: {
         color: '#0F172A',
         fontSize: 14,
         fontWeight: '700',
+    },
+    googleHintText: {
+        marginTop: 8,
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#64748B',
+        textAlign: 'center',
     },
     secondaryButtonText: {
         color: '#6366F1',

@@ -4,8 +4,18 @@ import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { normalizeLanguage } from '@/constants/i18n';
+import { normalizePlanTier } from '@/services/subscriptionPlan';
 
 const LAST_PROTECTED_PATH_KEY = 'last_protected_path';
+const NON_RECOVERABLE_PATH_PREFIXES = [
+    '/admin',
+    '/(admin)',
+    '/new-contact',
+    '/new-loan',
+    '/payment',
+    '/register-payment',
+    '/profile',
+];
 const isMissingDefaultLanguageColumn = (message?: string) =>
     String(message || '').toLowerCase().includes('default_language');
 const normalizeRole = (role?: string | null) => {
@@ -16,22 +26,27 @@ const normalizeRole = (role?: string | null) => {
 };
 
 export const useAuth = () => {
-    const { setSession, setUser, setRole, setLanguage, setInitialized, session, initialized } = useAuthStore();
+    const { setSession, setUser, setRole, setPlanTier, setLanguage, setInitialized, session, initialized } = useAuthStore();
     const pathname = usePathname();
     const router = useRouter();
     const segments = useSegments();
 
+    const isRecoverableProtectedPath = (value?: string | null) => {
+        if (!value) return false;
+        return !NON_RECOVERABLE_PATH_PREFIXES.some((prefix) => value.startsWith(prefix));
+    };
+
     const fetchProfileMeta = async (userId: string) => {
         let { data, error } = await supabase
             .from('profiles')
-            .select('role, default_language')
+            .select('role, default_language, plan_tier')
             .eq('id', userId)
             .single();
 
         if (error && isMissingDefaultLanguageColumn(error.message)) {
             const fallback = await supabase
                 .from('profiles')
-                .select('role')
+                .select('role, plan_tier')
                 .eq('id', userId)
                 .single();
             data = fallback.data as any;
@@ -39,10 +54,10 @@ export const useAuth = () => {
         }
 
         const normalizedRole = normalizeRole((data as any)?.role);
-
+        const planTier = normalizePlanTier((data as any)?.plan_tier);
         const language = normalizeLanguage((data as any)?.default_language);
 
-        return { normalizedRole, language };
+        return { normalizedRole, planTier, language };
     };
 
     useEffect(() => {
@@ -53,11 +68,13 @@ export const useAuth = () => {
             setUser(session?.user ?? null);
 
             if (session?.user?.id) {
-                const { normalizedRole, language } = await fetchProfileMeta(session.user.id);
+                const { normalizedRole, planTier, language } = await fetchProfileMeta(session.user.id);
                 setRole(normalizedRole);
+                setPlanTier(planTier);
                 setLanguage(language);
             } else {
                 setRole(null);
+                setPlanTier('free');
                 setLanguage('en');
             }
 
@@ -73,11 +90,13 @@ export const useAuth = () => {
                 setUser(session?.user ?? null);
 
                 if (session?.user?.id) {
-                    const { normalizedRole, language } = await fetchProfileMeta(session.user.id);
+                    const { normalizedRole, planTier, language } = await fetchProfileMeta(session.user.id);
                     setRole(normalizedRole);
+                    setPlanTier(planTier);
                     setLanguage(language);
                 } else {
                     setRole(null);
+                    setPlanTier('free');
                     setLanguage('en');
                     // Prevent stale protected-route recovery after a sign-out.
                     await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
@@ -114,12 +133,14 @@ export const useAuth = () => {
         const isEphemeralFormRoute =
             normalizedPath.startsWith('/new-contact') ||
             normalizedPath.startsWith('/new-loan') ||
+            normalizedPath.startsWith('/payment') ||
             normalizedPath.startsWith('/register-payment');
 
         const handleRouting = async () => {
             if (session && !inAuthRoute && !isLandingPage && !isEphemeralFormRoute) {
                 // Keep track of last protected route for refresh/reload recovery.
-                await AsyncStorage.setItem(LAST_PROTECTED_PATH_KEY, pathname);
+                const pathToPersist = isRecoverableProtectedPath(pathname) ? pathname : '/(tabs)';
+                await AsyncStorage.setItem(LAST_PROTECTED_PATH_KEY, pathToPersist);
             }
 
             if (session && isLandingPage) {
@@ -127,11 +148,7 @@ export const useAuth = () => {
                 const hasSafeRecoverPath =
                     !!lastPath &&
                     lastPath !== pathname &&
-                    !lastPath.startsWith('/admin') &&
-                    !lastPath.startsWith('/(admin)') &&
-                    !lastPath.startsWith('/new-contact') &&
-                    !lastPath.startsWith('/new-loan') &&
-                    !lastPath.startsWith('/register-payment');
+                    isRecoverableProtectedPath(lastPath);
 
                 if (hasSafeRecoverPath) {
                     router.replace(lastPath as any);

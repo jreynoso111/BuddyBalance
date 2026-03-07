@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, View as RNView, RefreshControl } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { ArrowUpRight, ArrowDownLeft, Plus, Wallet, Box, Bell, Clock3, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownLeft, Plus, Wallet, Box, Bell, Clock3, AlertTriangle, CheckCircle2, UserPlus } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -23,6 +23,18 @@ type LoanRecord = {
   currency: string | null;
   contacts?: { name?: string | null } | null;
   remaining_amount?: number;
+  last_activity_at?: string;
+  last_payment_at?: string | null;
+  last_payment_amount?: number | null;
+  last_payment_method?: 'money' | 'item' | null;
+};
+
+type PaymentRecord = {
+  amount: number | null;
+  loan_id: string;
+  created_at: string;
+  payment_date: string | null;
+  payment_method: 'money' | 'item' | null;
 };
 
 export default function DashboardScreen() {
@@ -33,7 +45,9 @@ export default function DashboardScreen() {
   const [recentLoans, setRecentLoans] = useState<LoanRecord[]>([]);
   const [dueItems, setDueItems] = useState<LoanRecord[]>([]);
   const [requestCount, setRequestCount] = useState(0);
+  const [recordCount, setRecordCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const fetchInFlightRef = useRef(false);
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -41,6 +55,7 @@ export default function DashboardScreen() {
   const bottomInset = Math.max(insets.bottom, 12);
   const fabBottomOffset = bottomInset + 16;
   const scrollBottomPadding = fabBottomOffset + 84;
+  const greetingTitle = accountName.trim() ? `${greeting}, ${accountName.trim()}!` : `${greeting}!`;
 
   useFocusEffect(
     React.useCallback(() => {
@@ -48,9 +63,37 @@ export default function DashboardScreen() {
     }, [user?.id])
   );
 
-  const fetchData = async () => {
-    if (!user) return;
-    setRefreshing(true);
+  React.useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`dashboard-requests:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'p2p_requests',
+          filter: `to_user_id=eq.${user.id}`,
+        },
+        () => {
+          void fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  const fetchData = async (options?: { showRefreshControl?: boolean }) => {
+    if (!user || fetchInFlightRef.current) return;
+    const showRefreshControl = options?.showRefreshControl === true;
+    fetchInFlightRef.current = true;
+    if (showRefreshControl) {
+      setRefreshing(true);
+    }
 
     try {
       const profileNameFromMetadata =
@@ -67,11 +110,10 @@ export default function DashboardScreen() {
           .select('id, amount, type, status, category, created_at, due_date, item_name, currency, contacts(name)')
           .eq('user_id', user.id)
           .is('deleted_at', null)
-          .neq('status', 'paid')
           .order('created_at', { ascending: false }),
         supabase
           .from('payments')
-          .select('amount, loan_id, created_at')
+          .select('amount, loan_id, created_at, payment_date, payment_method')
           .eq('user_id', user.id),
         supabase
           .from('p2p_requests')
@@ -84,28 +126,57 @@ export default function DashboardScreen() {
       if (profileName) {
         setAccountName(profileName);
       } else if (!profileNameFromMetadata) {
-        setAccountName('there');
+        setAccountName('');
       }
 
       const allLoans = (loansResult.data || []) as LoanRecord[];
-      const allPayments = paymentsResult.data || [];
+      const allPayments = (paymentsResult.data || []) as PaymentRecord[];
       const paymentTotals = new Map<string, number>();
+      const paymentActivity = new Map<string, {
+        at: string;
+        amount: number | null;
+        method: 'money' | 'item' | null;
+      }>();
 
-      allPayments.forEach((payment: any) => {
-        const current = paymentTotals.get(payment.loan_id) || 0;
-        paymentTotals.set(payment.loan_id, current + Number(payment.amount || 0));
+      allPayments.forEach((payment) => {
+        const paymentAmount = Number(payment.amount || 0);
+        if (payment.payment_method === 'money') {
+          const current = paymentTotals.get(payment.loan_id) || 0;
+          paymentTotals.set(payment.loan_id, current + paymentAmount);
+        }
+
+        const activityAt = payment.payment_date || payment.created_at;
+        const currentActivity = paymentActivity.get(payment.loan_id);
+        if (!currentActivity || getTimestamp(activityAt) > getTimestamp(currentActivity.at)) {
+          paymentActivity.set(payment.loan_id, {
+            at: activityAt,
+            amount: Number.isFinite(paymentAmount) ? paymentAmount : null,
+            method: payment.payment_method,
+          });
+        }
       });
 
       const enrichedLoans = allLoans.map((loan) => {
         const paid = paymentTotals.get(loan.id) || 0;
         const remaining = loan.category === 'money' ? Math.max(Number(loan.amount || 0) - paid, 0) : 0;
+        const latestPayment = paymentActivity.get(loan.id);
+        const lastActivityAt =
+          latestPayment && getTimestamp(latestPayment.at) > getTimestamp(loan.created_at)
+            ? latestPayment.at
+            : loan.created_at;
+
         return {
           ...loan,
           remaining_amount: remaining,
+          last_activity_at: lastActivityAt,
+          last_payment_at: latestPayment?.at || null,
+          last_payment_amount: latestPayment?.amount ?? null,
+          last_payment_method: latestPayment?.method ?? null,
         };
       });
 
-      const moneyLoans = enrichedLoans.filter((loan) => loan.category === 'money');
+      const openLoans = enrichedLoans.filter((loan) => loan.status !== 'paid');
+      const moneyLoans = openLoans.filter((loan) => loan.category === 'money');
       const lent = moneyLoans
         .filter((loan) => loan.type === 'lent')
         .reduce((acc, loan) => acc + Number(loan.remaining_amount || 0), 0);
@@ -118,7 +189,7 @@ export default function DashboardScreen() {
       const soon = new Date(now);
       soon.setDate(now.getDate() + 7);
 
-      const actionableDueItems = enrichedLoans
+      const actionableDueItems = openLoans
         .filter((loan) => loan.status === 'active' && loan.due_date)
         .map((loan) => ({
           ...loan,
@@ -138,27 +209,39 @@ export default function DashboardScreen() {
 
       setSummary({ lent, borrowed, overdue: overdueCount, dueSoon: dueSoonCount });
       setDueItems(actionableDueItems.slice(0, 5));
-      setRecentLoans(enrichedLoans.slice(0, 8));
+      setRecentLoans(
+        [...enrichedLoans]
+          .sort((a, b) => getTimestamp(b.last_activity_at || b.created_at) - getTimestamp(a.last_activity_at || a.created_at))
+          .slice(0, 8)
+      );
+      setRecordCount(enrichedLoans.length);
       setRequestCount(requestsResult.count || 0);
+    } catch (error: any) {
+      console.error('dashboard load failed:', error?.message || error);
     } finally {
-      setRefreshing(false);
+      if (showRefreshControl) {
+        setRefreshing(false);
+      }
+      fetchInFlightRef.current = false;
     }
   };
 
   const balance = summary.lent - summary.borrowed;
 
   return (
-    <Screen style={styles.container}>
+    <Screen style={styles.container} safeAreaEdges={['left', 'right', 'bottom']}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPadding }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchData} tintColor={Colors[colorScheme].tint} />}
+        contentInsetAdjustmentBehavior="never"
+        automaticallyAdjustContentInsets={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void fetchData({ showRefreshControl: true })} tintColor={Colors[colorScheme].tint} />}
       >
         <View style={styles.header}>
           <RNView style={styles.greetingRow}>
-            <View>
-              <Text style={styles.greeting}>{greeting}, {accountName}!</Text>
+            <RNView style={styles.greetingCopy}>
+              <Text style={styles.greeting}>{greetingTitle}</Text>
               <Text style={styles.subtitle}>Focus on what needs attention first.</Text>
-            </View>
+            </RNView>
             <TouchableOpacity style={styles.requestIcon} onPress={() => router.push('/requests')}>
               <Bell size={24} color="#0F172A" />
               {requestCount > 0 && (
@@ -170,20 +253,31 @@ export default function DashboardScreen() {
           </RNView>
         </View>
 
+        <RNView style={styles.actionRow}>
+          <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => router.push('/new-loan')}>
+            <Plus size={18} color="#FFFFFF" />
+            <Text style={styles.actionButtonPrimaryText}>New record</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={() => router.push('/new-contact?mode=friend')}>
+            <UserPlus size={18} color="#4F46E5" />
+            <Text style={styles.actionButtonSecondaryText}>Add friend</Text>
+          </TouchableOpacity>
+        </RNView>
+
         <Card style={styles.balanceCard}>
           <RNView style={styles.balanceCardHeader}>
             <View>
-              <Text style={styles.balanceLabel}>Net position</Text>
+              <Text style={styles.balanceLabel}>Open balance</Text>
               <Text style={styles.balanceValue}>{formatSignedCurrency(balance)}</Text>
             </View>
             <RNView style={[styles.netBadge, balance >= 0 ? styles.netBadgePositive : styles.netBadgeNegative]}>
               <Text style={[styles.netBadgeText, balance >= 0 ? styles.netBadgeTextPositive : styles.netBadgeTextNegative]}>
-                {balance >= 0 ? 'Ahead' : 'Behind'}
+                {balance >= 0 ? 'You lent more' : 'You borrowed more'}
               </Text>
             </RNView>
           </RNView>
           <Text style={styles.balanceHint}>
-            {balance >= 0 ? 'You are owed more than you owe.' : 'You owe more than you are owed.'}
+            {balance >= 0 ? 'Right now, friends owe you more than you owe them.' : 'Right now, you owe more than friends owe you.'}
           </Text>
 
           <RNView style={styles.balanceBreakdownRow}>
@@ -191,14 +285,14 @@ export default function DashboardScreen() {
               <RNView style={[styles.statIcon, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
                 <ArrowUpRight size={18} color="#10B981" />
               </RNView>
-              <Text style={styles.breakdownLabel}>To collect</Text>
+              <Text style={styles.breakdownLabel}>They owe you</Text>
               <Text style={[styles.breakdownValue, { color: '#047857' }]}>{formatCurrency(summary.lent)}</Text>
             </RNView>
             <RNView style={styles.balanceBreakdownCard}>
               <RNView style={[styles.statIcon, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
                 <ArrowDownLeft size={18} color="#EF4444" />
               </RNView>
-              <Text style={styles.breakdownLabel}>To pay</Text>
+              <Text style={styles.breakdownLabel}>You owe</Text>
               <Text style={[styles.breakdownValue, { color: '#B91C1C' }]}>{formatCurrency(summary.borrowed)}</Text>
             </RNView>
           </RNView>
@@ -206,9 +300,7 @@ export default function DashboardScreen() {
           <View style={styles.distributionSection}>
             <RNView style={styles.distributionLabels}>
               <Text style={styles.distributionTitle}>Balance mix</Text>
-              <Text style={styles.distributionPercent}>
-                {getCollectShare(summary.lent, summary.borrowed)}% collect
-              </Text>
+              <Text style={styles.distributionPercent}>{getCollectShare(summary.lent, summary.borrowed)}% owed to you</Text>
             </RNView>
             <RNView style={styles.distributionBar}>
               <RNView
@@ -227,11 +319,11 @@ export default function DashboardScreen() {
             <RNView style={styles.distributionLegend}>
               <RNView style={styles.legendItem}>
                 <RNView style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-                <Text style={styles.legendText}>{getCollectShare(summary.lent, summary.borrowed)}% to collect</Text>
+                <Text style={styles.legendText}>{getCollectShare(summary.lent, summary.borrowed)}% owed to you</Text>
               </RNView>
               <RNView style={styles.legendItem}>
                 <RNView style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
-                <Text style={styles.legendText}>{100 - getCollectShare(summary.lent, summary.borrowed)}% to pay</Text>
+                <Text style={styles.legendText}>{100 - getCollectShare(summary.lent, summary.borrowed)}% you owe</Text>
               </RNView>
             </RNView>
           </View>
@@ -239,9 +331,9 @@ export default function DashboardScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Due next</Text>
+            <Text style={styles.sectionTitle}>Coming up</Text>
             <TouchableOpacity onPress={() => router.push('/requests')}>
-              <Text style={styles.sectionLink}>Requests</Text>
+              <Text style={styles.sectionLink}>Confirmations</Text>
             </TouchableOpacity>
           </View>
 
@@ -251,30 +343,30 @@ export default function DashboardScreen() {
                 <AlertTriangle size={18} color="#F59E0B" />
               </RNView>
               <Text style={styles.insightValue}>{summary.overdue}</Text>
-              <Text style={styles.insightLabel}>Overdue</Text>
+              <Text style={styles.insightLabel}>Needs attention</Text>
             </Card>
             <Card style={styles.insightCard}>
               <RNView style={[styles.insightIcon, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
                 <Clock3 size={18} color="#3B82F6" />
               </RNView>
               <Text style={styles.insightValue}>{summary.dueSoon}</Text>
-              <Text style={styles.insightLabel}>Due in 7 days</Text>
+              <Text style={styles.insightLabel}>Next 7 days</Text>
             </Card>
             <Card style={styles.insightCard}>
               <RNView style={[styles.insightIcon, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
                 <CheckCircle2 size={18} color="#10B981" />
               </RNView>
-              <Text style={styles.insightValue}>{recentLoans.length}</Text>
-              <Text style={styles.insightLabel}>Open records</Text>
+              <Text style={styles.insightValue}>{recordCount}</Text>
+              <Text style={styles.insightLabel}>Shared records</Text>
             </Card>
           </RNView>
 
           {dueItems.length === 0 ? (
             <Card style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>Nothing due soon.</Text>
-              <Text style={styles.emptyText}>Your active records are clear for now. Add a new one when something happens.</Text>
+              <Text style={styles.emptyTitle}>Nothing to follow up.</Text>
+              <Text style={styles.emptyText}>Your active records are quiet for now. Add a new one when something happens.</Text>
               <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/new-loan')}>
-                <Text style={styles.emptyButtonText}>Record transaction</Text>
+                <Text style={styles.emptyButtonText}>Add a record</Text>
               </TouchableOpacity>
             </Card>
           ) : (
@@ -306,7 +398,7 @@ export default function DashboardScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent activity</Text>
+            <Text style={styles.sectionTitle}>Recent records</Text>
             <TouchableOpacity onPress={() => router.push('/contacts')}>
               <Text style={styles.sectionLink}>Contacts</Text>
             </TouchableOpacity>
@@ -314,10 +406,10 @@ export default function DashboardScreen() {
 
           {recentLoans.length === 0 ? (
             <Card style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No activity recorded yet.</Text>
-              <Text style={styles.emptyText}>Start with one record so the overview can show who owes what and when.</Text>
+              <Text style={styles.emptyTitle}>No shared activity yet.</Text>
+              <Text style={styles.emptyText}>Start with one record so the overview can remind you what happened and with whom.</Text>
               <TouchableOpacity style={styles.emptyButton} onPress={() => router.push('/new-loan')}>
-                <Text style={styles.emptyButtonText}>New transaction</Text>
+                <Text style={styles.emptyButtonText}>New record</Text>
               </TouchableOpacity>
             </Card>
           ) : (
@@ -338,7 +430,7 @@ export default function DashboardScreen() {
                     </View>
                   </RNView>
                   <RNView style={styles.listRight}>
-                    <Text style={[styles.amountText, { color: item.category === 'money' ? (item.type === 'lent' ? '#10B981' : '#EF4444') : '#6366F1' }]}>{getRecordValue(item)}</Text>
+                    <Text style={[styles.amountText, { color: item.category === 'money' ? (item.type === 'lent' ? '#10B981' : '#EF4444') : '#6366F1' }]}>{getRecentRecordValue(item)}</Text>
                     <Text style={styles.statusBadge}>{item.status}</Text>
                   </RNView>
                 </Card>
@@ -364,6 +456,12 @@ function formatSignedCurrency(value: number) {
   return value > 0 ? `+$${Math.round(value).toLocaleString()}` : `-$${Math.round(Math.abs(value)).toLocaleString()}`;
 }
 
+function getTimestamp(value?: string | null) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
 function getCollectShare(lent: number, borrowed: number) {
   const total = lent + borrowed;
   if (total <= 0) return 50;
@@ -387,6 +485,18 @@ function getDueDescriptor(dueDate: string | null) {
 }
 
 function getRecordDescriptor(item: LoanRecord) {
+  if (item.last_payment_at && item.last_activity_at === item.last_payment_at) {
+    if (item.last_payment_method === 'item') {
+      return item.type === 'lent' ? 'Latest activity: item returned' : 'Latest activity: item handoff logged';
+    }
+
+    if (item.status === 'paid') {
+      return item.type === 'lent' ? 'Latest activity: paid in full' : 'Latest activity: settled in full';
+    }
+
+    return item.type === 'lent' ? 'Latest activity: payment logged' : 'Latest activity: repayment logged';
+  }
+
   if (item.category === 'item') {
     return item.type === 'lent'
       ? `Needs to return ${item.item_name || 'item'}`
@@ -406,22 +516,42 @@ function getRecordValue(item: LoanRecord) {
   return `${item.type === 'lent' ? '+' : '-'}${symbol}${amount}`;
 }
 
+function getRecentRecordValue(item: LoanRecord) {
+  if (
+    item.category === 'money' &&
+    item.last_payment_at &&
+    item.last_activity_at === item.last_payment_at &&
+    Number.isFinite(Number(item.last_payment_amount))
+  ) {
+    const symbol = getCurrencySymbol(item.currency || 'USD');
+    const amount = Math.round(Number(item.last_payment_amount || 0)).toLocaleString();
+    return `${item.type === 'lent' ? '+' : '-'}${symbol}${amount}`;
+  }
+
+  return getRecordValue(item);
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 36,
+    paddingTop: 8,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 16,
     backgroundColor: 'transparent',
   },
   greetingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    backgroundColor: 'transparent',
+  },
+  greetingCopy: {
+    flex: 1,
+    paddingRight: 12,
     backgroundColor: 'transparent',
   },
   greeting: {
@@ -433,6 +563,40 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: '#64748B',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+    backgroundColor: 'transparent',
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  actionButtonPrimary: {
+    backgroundColor: '#0F172A',
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  actionButtonPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  actionButtonSecondaryText: {
+    color: '#4F46E5',
+    fontSize: 15,
+    fontWeight: '800',
   },
   requestIcon: {
     padding: 10,

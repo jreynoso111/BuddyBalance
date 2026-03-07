@@ -3,6 +3,9 @@
     "name": "I GOT U",
     "slug": "igotyou",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "igotyou",
@@ -14,12 +17,15 @@
     },
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "1",
       "infoPlist": {
         "NSFaceIDUsageDescription": "Use Face ID to securely unlock your account in I GOT U."
       },
       "bundleIdentifier": "com.anonymous.igotyou"
     },
     "android": {
+      "package": "com.anonymous.igotyou",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F8FAFC",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +41,19 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow I GOT U to access your photos so you can choose a profile picture or attach an image to a record."
+        }
+      ],
+      [
+        "expo-web-browser",
+        {
+          "experimentalLauncherActivity": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
