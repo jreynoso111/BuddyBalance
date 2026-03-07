@@ -1,25 +1,46 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View as RNView } from 'react-native';
 import * as Linking from 'expo-linking';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Screen, Card, Text } from '@/components/Themed';
+import { waitForAuthSession } from '@/services/authSession';
 import { completeOAuthFromUrl } from '@/services/oauth';
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const urlFromLinking = Linking.useURL();
+  const searchParams = useLocalSearchParams<Record<string, string | string[]>>();
   const [statusText, setStatusText] = useState('Completing Google sign in...');
   const [completed, setCompleted] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  const callbackUrlFromParams = useMemo(() => {
+    const params = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (typeof value === 'string') {
+        params.append(key, value);
+        continue;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => params.append(key, item));
+      }
+    }
+
+    const query = params.toString();
+    return query ? `igotyou://auth/callback?${query}` : null;
+  }, [searchParams]);
+
   const initialUrl = useMemo(() => {
     if (urlFromLinking) return urlFromLinking;
+    if (callbackUrlFromParams) return callbackUrlFromParams;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       return window.location.href;
     }
     return null;
-  }, [urlFromLinking]);
+  }, [callbackUrlFromParams, urlFromLinking]);
 
   useEffect(() => {
     let mounted = true;
@@ -36,6 +57,15 @@ export default function AuthCallbackScreen() {
       if (!mounted) return;
 
       if (result.status === 'success') {
+        const session = await waitForAuthSession({ timeoutMs: 5000, intervalMs: 150 });
+        if (!mounted) return;
+
+        if (!session) {
+          setFailed(true);
+          setStatusText('Google sign in finished, but the session was not saved. Please try again.');
+          return;
+        }
+
         setCompleted(true);
         setStatusText('Google account linked successfully.');
         router.replace('/(tabs)');

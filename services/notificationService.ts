@@ -1,4 +1,5 @@
 import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
 import { Platform, Alert } from 'react-native';
 import Constants from 'expo-constants';
 import { getOrCreateUserPreferences } from '@/services/userPreferences';
@@ -22,27 +23,57 @@ type ReminderScheduleOptions = {
     itemName?: string | null;
 };
 
-type NotificationsModule = typeof import('expo-notifications');
-let notificationsModule: NotificationsModule | null | undefined;
-
 async function getNotificationsModule() {
     if (isWeb || isAndroidExpoGo) {
         return null;
     }
 
-    if (notificationsModule !== undefined) {
-        return notificationsModule;
+    if (
+        typeof Notifications.getPermissionsAsync !== 'function' ||
+        typeof Notifications.scheduleNotificationAsync !== 'function'
+    ) {
+        console.warn('expo-notifications unavailable: required APIs are missing');
+        return null;
     }
 
-    try {
-        const loadModule = eval('require') as NodeRequire;
-        notificationsModule = loadModule('expo-notifications') as NotificationsModule;
-    } catch (error) {
-        console.warn('expo-notifications unavailable:', error);
-        notificationsModule = null;
+    return Notifications;
+}
+
+export async function showSharedUpdateNotification(options: {
+    type: string;
+    fromName?: string | null;
+    message?: string | null;
+}) {
+    if (isWeb) return;
+    const Notifications = await getNotificationsModule();
+    if (!Notifications) return;
+
+    const sender = options.fromName?.trim() || 'Someone';
+    let title = 'Shared update';
+    let body = options.message?.trim() || `${sender} sent you an update in I GOT U.`;
+
+    if (options.type === 'friend_request') {
+        title = 'New friend request';
+        body = options.message?.trim() || `${sender} wants to connect with you.`;
+    } else if (options.type === 'loan_validation') {
+        title = 'Shared record request';
+        body = options.message?.trim() || `${sender} shared a new record with you.`;
+    } else if (options.type === 'payment_validation') {
+        title = 'Payment update';
+        body = options.message?.trim() || `${sender} logged a payment that needs your confirmation.`;
+    } else if (options.type === 'debt_reduction') {
+        title = 'Adjustment request';
+        body = options.message?.trim() || `${sender} suggested a new total for a shared record.`;
     }
 
-    return notificationsModule;
+    await Notifications.scheduleNotificationAsync({
+        content: {
+            title,
+            body,
+            sound: true,
+        },
+        trigger: null,
+    });
 }
 
 async function ensureAndroidNotificationChannel() {

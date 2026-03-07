@@ -34,6 +34,11 @@ export default function RegisterPaymentScreen() {
     }, [normalizedPaymentId, user]);
 
     const goBackToRecord = () => {
+        if (typeof navigation.canGoBack === 'function' && navigation.canGoBack()) {
+            navigation.goBack();
+            return;
+        }
+
         if (normalizedLoanId) {
             router.replace({
                 pathname: '/loan/[id]',
@@ -132,8 +137,8 @@ export default function RegisterPaymentScreen() {
         }
 
         confirmAction(
-            normalizedPaymentId ? 'Update Payment' : 'Confirm Payment',
-            `Are you sure you want to ${normalizedPaymentId ? 'update' : 'register'} this ${paymentMethod === 'money' ? 'payment' : 'item return'}?`,
+            normalizedPaymentId ? 'Update Payment' : 'Save Payment',
+            `Are you sure you want to ${normalizedPaymentId ? 'update' : 'save'} this ${paymentMethod === 'money' ? 'payment' : 'item return'}?`,
             async () => {
                 await performSave();
             }
@@ -318,7 +323,7 @@ export default function RegisterPaymentScreen() {
                         payment_id: normalizedPaymentId,
                         from_user_id: user?.id,
                         to_user_id: targetUserId,
-                        message: `A payment has been modified. Please review.`,
+                        message: `A payment on your shared record was updated. Please review.`,
                         status: 'pending',
                     },
                 ]);
@@ -354,7 +359,7 @@ export default function RegisterPaymentScreen() {
                         payment_id: newPayment.id,
                         from_user_id: user?.id,
                         to_user_id: targetUserId,
-                        message: `New payment registered for your transaction.`,
+                        message: `A new payment was added to your shared record.`,
                         status: 'pending',
                     },
                 ]);
@@ -370,7 +375,7 @@ export default function RegisterPaymentScreen() {
     return (
         <Screen style={styles.container}>
             <Stack.Screen options={{
-                title: normalizedPaymentId ? 'Edit Payment' : 'Register Payment',
+                title: normalizedPaymentId ? 'Edit Payment' : 'Add Payment',
                 headerTransparent: true,
                 headerTintColor: '#0F172A',
                 headerLeft: () => (
@@ -406,7 +411,7 @@ export default function RegisterPaymentScreen() {
                         <Card style={styles.mainCard}>
                             <ThemedView style={styles.inputHeader}>
                                 <Wallet size={20} color="#6366F1" />
-                                <Text style={styles.label}>Amount Paid</Text>
+                                <Text style={styles.label}>Amount to record</Text>
                             </ThemedView>
                             <ThemedView style={styles.amountInputContainer}>
                                 <Text style={styles.currencySymbol}>{getCurrencySymbol(normalizedCurrency as string)}</Text>
@@ -422,7 +427,7 @@ export default function RegisterPaymentScreen() {
                             </ThemedView>
                             <ThemedView style={styles.helperRow}>
                                 <Info size={14} color="#64748B" />
-                                <Text style={styles.helperText}>Remaining balance: {getCurrencySymbol(normalizedCurrency as string)}{Number(normalizedRemaining).toLocaleString()}</Text>
+                                <Text style={styles.helperText}>Still open: {getCurrencySymbol(normalizedCurrency as string)}{Number(normalizedRemaining).toLocaleString()}</Text>
                             </ThemedView>
                         </Card>
                     ) : (
@@ -462,7 +467,15 @@ export default function RegisterPaymentScreen() {
                         disabled={loading}
                         style={[styles.saveButton, loading && { opacity: 0.7 }]}
                     >
-                        <Text style={styles.saveButtonText}>{loading ? 'PROCESSING...' : (normalizedPaymentId ? 'Update Payment' : 'Confirm Payment')}</Text>
+                        <Text style={styles.saveButtonText}>{loading ? 'PROCESSING...' : (normalizedPaymentId ? 'Update Payment' : 'Save Payment')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={goBackToRecord}
+                        disabled={loading}
+                        style={[styles.cancelButton, loading && { opacity: 0.7 }]}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
 
                     {normalizedPaymentId && (
@@ -607,6 +620,21 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '800',
         letterSpacing: 0.5,
+    },
+    cancelButton: {
+        marginTop: 12,
+        borderWidth: 1,
+        borderColor: '#CBD5E1',
+        backgroundColor: '#FFFFFF',
+        padding: 18,
+        borderRadius: 18,
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        color: '#475569',
+        fontSize: 16,
+        fontWeight: '800',
+        letterSpacing: 0.3,
     },
     deleteButton: {
         marginTop: 12,

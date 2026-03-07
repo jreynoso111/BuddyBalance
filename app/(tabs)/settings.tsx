@@ -1,20 +1,24 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { LogOut, User, Bell, Shield, CircleHelp, FileOutput, ChevronRight } from 'lucide-react-native';
+import { LogOut, User, Bell, Shield, CircleHelp, FileOutput, ChevronRight, Sparkles } from 'lucide-react-native';
 import { exportLoansToCSV } from '@/services/exportService';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { DEFAULT_USER_PREFERENCES, getOrCreateUserPreferences } from '@/services/userPreferences';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getProfileAvatarPublicUrl, isMissingAvatarUrlColumn } from '@/services/profileAvatar';
+import { getPlanLabel, normalizePlanTier } from '@/services/subscriptionPlan';
 
 const LAST_PROTECTED_PATH_KEY = 'last_protected_path';
 
 export default function SettingsScreen() {
-    const { user, role, setSession, setUser, setRole, setLanguage } = useAuthStore();
+    const { user, role, planTier, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
     const router = useRouter();
     const [prefs, setPrefs] = React.useState(DEFAULT_USER_PREFERENCES);
+    const [profileName, setProfileName] = React.useState('');
+    const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
     const normalizedRole = (role || '').toLowerCase().trim();
     const hasAdminAccess = normalizedRole === 'admin' || normalizedRole === 'administrator';
 
@@ -22,6 +26,7 @@ export default function SettingsScreen() {
         React.useCallback(() => {
             if (!user?.id) return;
             void loadPreferences();
+            void loadProfileSummary();
         }, [user?.id])
     );
 
@@ -40,12 +45,41 @@ export default function SettingsScreen() {
         }
     };
 
+    const loadProfileSummary = async () => {
+        if (!user?.id) return;
+
+        let { data, error } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url, plan_tier')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (error && isMissingAvatarUrlColumn(error.message)) {
+            const fallback = await supabase
+                .from('profiles')
+                .select('full_name, plan_tier')
+                .eq('id', user.id)
+                .maybeSingle();
+            data = fallback.data as any;
+            error = fallback.error as any;
+        }
+
+        if (error) {
+            console.error('profile summary load failed:', error.message);
+            return;
+        }
+
+        setProfileName(data?.full_name || '');
+        setAvatarUrl(getProfileAvatarPublicUrl((data as any)?.avatar_url || null));
+        setPlanTier(normalizePlanTier((data as any)?.plan_tier));
+    };
+
     const handleSignOut = async () => {
         await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
-        // Clear local auth state immediately to avoid landing->tabs bounce during sign-out transition.
         setSession(null);
         setUser(null);
         setRole(null);
+        setPlanTier('free');
         setLanguage('en');
 
         const { error } = await supabase.auth.signOut();
@@ -64,11 +98,17 @@ export default function SettingsScreen() {
     };
 
     const menuItems = [
+        {
+            icon: Sparkles,
+            label: planTier === 'premium' ? 'Manage Premium' : 'Upgrade to Premium',
+            sub: planTier === 'premium' ? 'Unlimited friends and records' : 'Unlock unlimited friends and records',
+            onPress: () => router.push('/subscription' as any),
+        },
         { icon: User, label: 'Profile', sub: user?.email, onPress: () => router.push('/profile') },
         { icon: Bell, label: 'Notifications', sub: prefs.push_enabled ? 'Enabled' : 'Disabled', onPress: () => router.push('/notifications') },
         { icon: Shield, label: 'Security', sub: prefs.biometric_enabled ? 'Biometric On' : 'Biometric Off', onPress: () => router.push('/security') },
         { icon: FileOutput, label: 'Export Data (CSV)', sub: 'Share report', onPress: handleExport },
-        { icon: CircleHelp, label: 'Help & Support', sub: 'FAQ & contact', onPress: () => router.push('/help-support') },
+        { icon: CircleHelp, label: 'Help & Support', sub: 'FAQ & guidance', onPress: () => router.push('/help-support') },
     ];
 
     if (hasAdminAccess) {
@@ -76,19 +116,30 @@ export default function SettingsScreen() {
             icon: Shield,
             label: 'Admin Dashboard',
             sub: 'Manage users and platform data',
-            onPress: () => router.push('/admin' as any)
+            onPress: () => router.push('/admin' as any),
         });
     }
 
+    const avatarInitial = (profileName || user?.email || '?').trim().charAt(0).toUpperCase();
+
     return (
-        <Screen style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Screen style={styles.container} safeAreaEdges={['left', 'right', 'bottom']}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                contentInsetAdjustmentBehavior="never"
+                automaticallyAdjustContentInsets={false}
+            >
                 <View style={styles.profileSection}>
                     <RNView style={styles.avatarLarge}>
-                        <Text style={styles.avatarLargeText}>{user?.email?.[0].toUpperCase()}</Text>
+                        {avatarUrl ? (
+                            <Image source={{ uri: avatarUrl }} style={styles.avatarLargeImage} />
+                        ) : (
+                            <Text style={styles.avatarLargeText}>{avatarInitial}</Text>
+                        )}
                     </RNView>
+                    {profileName ? <Text style={styles.profileName}>{profileName}</Text> : null}
                     <Text style={styles.profileEmail}>{user?.email}</Text>
-                    <Text style={styles.profileSub}>Standard Plan • User</Text>
+                    <Text style={styles.profileSub}>{getPlanLabel(planTier)} Plan • {hasAdminAccess ? 'Admin' : 'User'}</Text>
                 </View>
 
                 <Card style={styles.menuCard}>
@@ -97,7 +148,7 @@ export default function SettingsScreen() {
                             key={index}
                             style={[
                                 styles.item,
-                                index === menuItems.length - 1 && { borderBottomWidth: 0 }
+                                index === menuItems.length - 1 && { borderBottomWidth: 0 },
                             ]}
                             onPress={item.onPress}
                         >
@@ -132,7 +183,7 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: 20,
-        paddingTop: 40,
+        paddingTop: 16,
     },
     profileSection: {
         alignItems: 'center',
@@ -140,9 +191,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
     },
     avatarLarge: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 88,
+        height: 88,
+        borderRadius: 44,
         backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
@@ -153,14 +204,25 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOpacity: 0.05,
         shadowRadius: 10,
+        overflow: 'hidden',
+    },
+    avatarLargeImage: {
+        width: '100%',
+        height: '100%',
     },
     avatarLargeText: {
         fontSize: 32,
         fontWeight: '800',
         color: '#6366F1',
     },
+    profileName: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#0F172A',
+        marginBottom: 2,
+    },
     profileEmail: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: '#0F172A',
     },

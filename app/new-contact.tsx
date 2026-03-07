@@ -1,27 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Text, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { X, Check, Trash2 } from 'lucide-react-native';
+import { countLinkedFriends, PLAN_LIMITS } from '@/services/subscriptionPlan';
 
 export default function NewContactScreen() {
-    const { user } = useAuthStore();
+    const { user, planTier } = useAuthStore();
     const router = useRouter();
-    const { id } = useLocalSearchParams();
+    const headerHeight = useHeaderHeight();
+    const { id, mode } = useLocalSearchParams();
     const contactId = Array.isArray(id) ? id[0] : id;
+    const screenMode = Array.isArray(mode) ? mode[0] : mode;
+    const isFriendMode = screenMode === 'friend';
     const [name, setName] = useState('');
+    const [friendCode, setFriendCode] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [notes, setNotes] = useState('');
     const [socialNetwork, setSocialNetwork] = useState('');
+    const [existingTargetUserId, setExistingTargetUserId] = useState<string | null>(null);
+    const [existingLinkStatus, setExistingLinkStatus] = useState<'private' | 'pending' | 'accepted'>('private');
     const [loading, setLoading] = useState(false);
+    const scrollViewRef = useRef<ScrollView | null>(null);
+
+    const normalizeLinkStatus = (value?: string | null): 'private' | 'pending' | 'accepted' => {
+        const normalized = String(value || '').toLowerCase().trim();
+        if (normalized === 'accepted') return 'accepted';
+        if (normalized === 'pending') return 'pending';
+        return 'private';
+    };
+
+    const getRelationLookupWarning = (message?: string | null) => {
+        const normalized = (message || '').toLowerCase();
+        if (normalized.includes('find_profile_match')) {
+            return 'This environment is missing the profile match function. The contact was saved, but shared confirmations between accounts will not work until the latest Supabase SQL is applied.';
+        }
+        if (normalized.includes('find_profile_by_friend_code')) {
+            return 'This environment is missing the friend code lookup function. The contact was saved, but the account link could not be created until the latest Supabase SQL is applied.';
+        }
+
+        return 'The contact was saved, but the app could not verify whether this person already has an account. Shared confirmations may stay unavailable for this contact.';
+    };
 
     useEffect(() => {
         if (contactId) {
             fetchContact();
         }
     }, [contactId, user]);
+
+    useFocusEffect(
+        useCallback(() => {
+            const timeoutId = setTimeout(() => {
+                scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+            }, 0);
+
+            return () => clearTimeout(timeoutId);
+        }, [])
+    );
 
     const confirmAction = (title: string, message: string, onConfirm: () => Promise<void> | void) => {
         if (Platform.OS === 'web') {
@@ -69,22 +107,103 @@ export default function NewContactScreen() {
             setPhone(data.phone || '');
             setNotes(data.notes || '');
             setSocialNetwork(data.social_network || '');
+            setExistingTargetUserId(data.target_user_id || null);
+            setExistingLinkStatus(normalizeLinkStatus(data.link_status || (data.target_user_id ? 'accepted' : 'private')));
         }
         setLoading(false);
     };
 
-    const onSave = async () => {
-        if (!name.trim()) {
-            Alert.alert('Error', 'Name is required');
+    const upsertFriendRequest = async (options: {
+        toUserId: string;
+        contactId: string;
+        contactName: string;
+        resolvedName: string;
+        email: string | null;
+        phone: string | null;
+        socialNetwork: string | null;
+        notes: string | null;
+    }) => {
+        if (!user?.id) return;
+
+        const requestPayload = {
+            sender_contact_id: options.contactId,
+            sender_name: options.resolvedName,
+            sender_email: options.email,
+            sender_phone: options.phone,
+            sender_social_network: options.socialNetwork,
+            sender_notes: options.notes,
+        };
+
+        const baseRequest = {
+            type: 'friend_request',
+            from_user_id: user.id,
+            to_user_id: options.toUserId,
+            status: 'pending',
+            message: `${options.contactName} wants to connect with you as a friend.`,
+            request_payload: requestPayload,
+        };
+
+        const { data: existingRequest } = await supabase
+            .from('p2p_requests')
+            .select('id')
+            .eq('type', 'friend_request')
+            .eq('from_user_id', user.id)
+            .eq('to_user_id', options.toUserId)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (existingRequest?.id) {
+            await supabase
+                .from('p2p_requests')
+                .update({
+                    message: baseRequest.message,
+                    request_payload: requestPayload,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingRequest.id);
             return;
         }
 
+        const { error: requestError } = await supabase.from('p2p_requests').insert([baseRequest]);
+        if (requestError) {
+            throw requestError;
+        }
+    };
+
+    const onSave = async () => {
         if (!user?.id) {
             Alert.alert('Error', 'User not found');
             return;
         }
 
         setLoading(true);
+        let resolvedName = name.trim();
+        let targetUserId: string | null = existingTargetUserId;
+        let relationLookupWarning: string | null = null;
+        const normalizedFriendCode = friendCode.trim().toUpperCase();
+        const wantsAccountLink = Boolean(normalizedFriendCode);
+
+        if (normalizedFriendCode) {
+            const { data, error: friendCodeLookupError } = await supabase.rpc('find_profile_by_friend_code', {
+                p_friend_code: normalizedFriendCode,
+            });
+            const linkedProfile = Array.isArray(data) ? data[0] : data;
+
+            if (friendCodeLookupError) {
+                relationLookupWarning = getRelationLookupWarning(friendCodeLookupError.message);
+            } else if (!linkedProfile?.id) {
+                Alert.alert('Error', 'No user was found with that friend code.');
+                setLoading(false);
+                return;
+            } else {
+                targetUserId = linkedProfile.id;
+                if (!resolvedName) {
+                    resolvedName = String(linkedProfile.full_name || linkedProfile.email || `Friend ${normalizedFriendCode}`).trim();
+                }
+            }
+        }
 
         // Detect duplicate contact by email or phone
         if (email.trim() || phone.trim()) {
@@ -111,17 +230,73 @@ export default function NewContactScreen() {
             }
         }
 
-        // 1. Discover target_user_id via RPC (avoids exposing full profiles table)
-        let targetUserId = null;
-        if (email.trim() || phone.trim()) {
+        if (!normalizedFriendCode && (email.trim() || phone.trim())) {
             const { data, error: lookupError } = await supabase.rpc('find_profile_match', {
                 p_email: email.trim() || null,
                 p_phone: phone.trim() || null,
             });
-            if (!lookupError && data) {
+            if (lookupError) {
+                relationLookupWarning = getRelationLookupWarning(lookupError.message);
+            } else if (data) {
                 targetUserId = data;
             }
         }
+
+        if (targetUserId === user.id) {
+            Alert.alert('Error', "You can't add yourself.");
+            setLoading(false);
+            return;
+        }
+
+        if (!resolvedName) {
+            Alert.alert('Error', 'Name is required');
+            setLoading(false);
+            return;
+        }
+
+        if (targetUserId) {
+            const isNewLinkedFriend = existingTargetUserId !== targetUserId;
+            if (planTier === 'free' && isNewLinkedFriend) {
+                const { count, error: countError } = await countLinkedFriends(user.id);
+                if (countError) {
+                    Alert.alert('Error', countError.message);
+                    setLoading(false);
+                    return;
+                }
+
+                if (count >= PLAN_LIMITS.free.linkedFriends) {
+                    Alert.alert(
+                        'Free plan limit reached',
+                        `Free accounts can link up to ${PLAN_LIMITS.free.linkedFriends} friends. Upgrade to Premium to unlock unlimited linked friends.`,
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'View plans', onPress: () => router.push('/subscription' as any) },
+                        ]
+                    );
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            const { data: targetDuplicates } = await supabase
+                .from('contacts')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('target_user_id', targetUserId)
+                .is('deleted_at', null);
+
+            if (targetDuplicates && targetDuplicates.some((duplicate: any) => duplicate.id !== contactId)) {
+                Alert.alert('Duplicate Contact', 'You already linked this friend in your contacts.');
+                setLoading(false);
+                return;
+            }
+        }
+
+        const nextLinkStatus: 'private' | 'pending' | 'accepted' = targetUserId
+            ? existingLinkStatus === 'accepted' && existingTargetUserId === targetUserId && !wantsAccountLink
+                ? 'accepted'
+                : 'pending'
+            : 'private';
 
         if (contactId) {
             if (!user?.id) {
@@ -130,42 +305,92 @@ export default function NewContactScreen() {
                 return;
             }
 
-            const { error } = await supabase
+            const { data: updatedContact, error } = await supabase
                 .from('contacts')
                 .update({
-                    name: name.trim(),
+                    name: resolvedName,
                     email: email.trim() || null,
                     phone: phone.trim() || null,
                     notes: notes.trim() || null,
                     social_network: socialNetwork.trim() || null,
-                    target_user_id: targetUserId,
+                    target_user_id: nextLinkStatus === 'private' ? null : targetUserId,
+                    link_status: nextLinkStatus,
                 })
                 .eq('id', contactId)
-                .eq('user_id', user.id);
+                .eq('user_id', user.id)
+                .select('id')
+                .maybeSingle();
 
             if (error) {
                 Alert.alert('Error', error.message);
             } else {
-                Alert.alert('Success', 'Contact updated successfully');
+                try {
+                    if (targetUserId && nextLinkStatus === 'pending' && updatedContact?.id) {
+                        await upsertFriendRequest({
+                            toUserId: targetUserId,
+                            contactId: updatedContact.id,
+                            contactName: resolvedName,
+                            resolvedName,
+                            email: email.trim() || null,
+                            phone: phone.trim() || null,
+                            socialNetwork: socialNetwork.trim() || null,
+                            notes: notes.trim() || null,
+                        });
+                    }
+                } catch (requestError: any) {
+                    Alert.alert('Error', requestError?.message || 'The contact was saved, but the friend request could not be sent.');
+                    setLoading(false);
+                    return;
+                }
+                Alert.alert(
+                    relationLookupWarning ? 'Saved with warning' : 'Success',
+                    relationLookupWarning || (targetUserId && nextLinkStatus === 'pending'
+                        ? 'Friend request sent. They will need to accept before shared records sync between both accounts.'
+                        : 'Contact updated successfully')
+                );
                 router.back();
             }
         } else {
-            const { error } = await supabase.from('contacts').insert([
+            const { data: insertedContact, error } = await supabase.from('contacts').insert([
                 {
                     user_id: user?.id,
-                    name: name.trim(),
+                    name: resolvedName,
                     email: email.trim() || null,
                     phone: phone.trim() || null,
                     notes: notes.trim() || null,
                     social_network: socialNetwork.trim() || null,
-                    target_user_id: targetUserId,
+                    target_user_id: nextLinkStatus === 'private' ? null : targetUserId,
+                    link_status: nextLinkStatus,
                 },
-            ]);
+            ]).select('id').maybeSingle();
 
             if (error) {
                 Alert.alert('Error', error.message);
             } else {
-                Alert.alert('Success', 'Contact created successfully');
+                try {
+                    if (targetUserId && nextLinkStatus === 'pending' && insertedContact?.id) {
+                        await upsertFriendRequest({
+                            toUserId: targetUserId,
+                            contactId: insertedContact.id,
+                            contactName: resolvedName,
+                            resolvedName,
+                            email: email.trim() || null,
+                            phone: phone.trim() || null,
+                            socialNetwork: socialNetwork.trim() || null,
+                            notes: notes.trim() || null,
+                        });
+                    }
+                } catch (requestError: any) {
+                    Alert.alert('Error', requestError?.message || 'The contact was saved, but the friend request could not be sent.');
+                    setLoading(false);
+                    return;
+                }
+                Alert.alert(
+                    relationLookupWarning ? 'Saved with warning' : 'Success',
+                    relationLookupWarning || (targetUserId && nextLinkStatus === 'pending'
+                        ? 'Friend request sent. They will need to accept before shared records sync between both accounts.'
+                        : 'Contact created successfully')
+                );
                 router.back();
             }
         }
@@ -247,10 +472,18 @@ export default function NewContactScreen() {
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+            style={[
+                styles.container,
+                Platform.OS === 'ios' ? styles.containerIosOffset : null,
+            ]}
         >
             <Stack.Screen options={{
-                title: contactId ? 'Edit Contact' : 'New Contact',
+                title: contactId ? 'Edit Contact' : isFriendMode ? 'Add Friend' : 'New Contact',
+                headerTransparent: false,
+                headerStyle: {
+                    backgroundColor: '#fff',
+                },
                 headerLeft: () => (
                     <TouchableOpacity onPress={() => router.back()}>
                         <X size={24} color="#000" />
@@ -263,7 +496,15 @@ export default function NewContactScreen() {
                 )
             }} />
 
-            <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                ref={scrollViewRef}
+                contentContainerStyle={[
+                    styles.form,
+                    Platform.OS === 'ios' ? styles.formIosInset : null,
+                ]}
+                contentInsetAdjustmentBehavior="automatic"
+                showsVerticalScrollIndicator={false}
+            >
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Full Name *</Text>
                     <TextInput
@@ -272,6 +513,23 @@ export default function NewContactScreen() {
                         onChangeText={setName}
                         style={styles.input}
                     />
+                </View>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Friend Code (Optional)</Text>
+                    <TextInput
+                        placeholder="e.g. A1B2C3D4"
+                        value={friendCode}
+                        onChangeText={(value) => setFriendCode(value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        style={styles.input}
+                    />
+                    <Text style={styles.helperText}>
+                        {isFriendMode
+                            ? 'Use their code to connect both accounts so shared records stay in sync.'
+                            : 'Paste a friend code if this person also uses the app.'}
+                    </Text>
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -323,7 +581,9 @@ export default function NewContactScreen() {
                     disabled={loading}
                     style={styles.saveButton}
                 >
-                    <Text style={styles.saveButtonText}>{loading ? 'Saving...' : (contactId ? 'Update Contact' : 'Save Contact')}</Text>
+                    <Text style={styles.saveButtonText}>
+                        {loading ? 'Saving...' : (contactId ? 'Update Contact' : isFriendMode ? 'Save Friend' : 'Save Contact')}
+                    </Text>
                 </TouchableOpacity>
 
                 {contactId && (
@@ -348,11 +608,23 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    containerIosOffset: {
+        paddingTop: 88,
+    },
     form: {
         padding: 24,
     },
+    formIosInset: {
+        paddingTop: 120,
+    },
     inputGroup: {
         marginBottom: 20,
+    },
+    helperText: {
+        marginTop: 8,
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#64748B',
     },
     label: {
         fontSize: 14,

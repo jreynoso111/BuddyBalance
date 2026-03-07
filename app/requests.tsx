@@ -3,19 +3,73 @@ import { StyleSheet, FlatList, TouchableOpacity, View as RNView, Alert, RefreshC
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { useRouter, Stack } from 'expo-router';
-import { Check, X, Bell, Info, ArrowUpRight, ArrowDownLeft, Wallet, Box } from 'lucide-react-native';
+import { Stack } from 'expo-router';
+import { Check, X, Bell, ArrowDownLeft, Wallet, UserPlus } from 'lucide-react-native';
+import { useI18n } from '@/hooks/useI18n';
+import { getRequestedLoanAmount } from '@/utils/p2pRequests';
+
+function getRequestTypeLabel(type: string) {
+    if (type === 'friend_request') return 'Friend request';
+    if (type === 'loan_validation') return 'Shared record confirmation';
+    if (type === 'payment_validation') return 'Payment confirmation';
+    if (type === 'debt_reduction') return 'Adjustment request';
+    return 'Shared update';
+}
+
+function getRequestActionMessage(type: string, action: 'approved' | 'rejected') {
+    if (action === 'approved') {
+        if (type === 'friend_request') return 'You are now connected as friends.';
+        if (type === 'loan_validation') return 'The shared record has been confirmed.';
+        if (type === 'payment_validation') return 'The payment update has been confirmed.';
+        if (type === 'debt_reduction') return 'The new total has been saved.';
+        return 'The update has been confirmed.';
+    }
+
+    if (type === 'friend_request') return 'The friend request was declined.';
+    if (type === 'loan_validation') return 'The shared record was declined.';
+    if (type === 'payment_validation') return 'The payment update was declined.';
+    if (type === 'debt_reduction') return 'The adjustment request was declined.';
+    return 'The update was declined.';
+}
+
+function getDisplayName(profile: any) {
+    return profile?.full_name || profile?.email || 'Someone';
+}
 
 export default function RequestsScreen() {
     const { user } = useAuthStore();
+    const { t } = useI18n();
     const [requests, setRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const router = useRouter();
 
     useEffect(() => {
         fetchRequests();
     }, [user]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channel = supabase
+            .channel(`requests:${user.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'p2p_requests',
+                    filter: `to_user_id=eq.${user.id}`,
+                },
+                () => {
+                    void fetchRequests();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            void supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
 
     const fetchRequests = async () => {
         if (!user) return;
@@ -33,41 +87,182 @@ export default function RequestsScreen() {
         setRefreshing(false);
     };
 
-    const handleAction = async (request: any, action: 'approved' | 'rejected') => {
-        setLoading(true);
+    const applyApprovedRequest = async (request: any) => {
+        if (request.type === 'friend_request') {
+            const senderName = String(request.request_payload?.sender_name || getDisplayName(request.from_profile)).trim() || 'Friend';
+            const senderEmail = String(request.request_payload?.sender_email || request.from_profile?.email || '').trim() || null;
+            const senderPhone = String(request.request_payload?.sender_phone || '').trim() || null;
+            const senderNotes = String(request.request_payload?.sender_notes || '').trim() || null;
+            const senderSocial = String(request.request_payload?.sender_social_network || '').trim() || null;
 
-        // 1. Update the request status
-        const { error: requestError } = await supabase
-            .from('p2p_requests')
-            .update({ status: action, updated_at: new Date().toISOString() })
-            .eq('id', request.id);
+            await supabase
+                .from('contacts')
+                .update({
+                    link_status: 'accepted',
+                    target_user_id: request.to_user_id,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('user_id', request.from_user_id)
+                .eq('target_user_id', request.to_user_id)
+                .eq('link_status', 'pending');
 
-        if (requestError) {
-            Alert.alert('Error', requestError.message);
-            setLoading(false);
+            const { data: existingReverseContact } = await supabase
+                .from('contacts')
+                .select('id, name, email, phone, social_network, notes')
+                .eq('user_id', request.to_user_id)
+                .eq('target_user_id', request.from_user_id)
+                .is('deleted_at', null)
+                .limit(1)
+                .maybeSingle();
+
+            if (existingReverseContact?.id) {
+                const { error: reverseUpdateError } = await supabase
+                    .from('contacts')
+                    .update({
+                        target_user_id: request.from_user_id,
+                        link_status: 'accepted',
+                        name: existingReverseContact.name || senderName,
+                        email: existingReverseContact.email || senderEmail,
+                        phone: existingReverseContact.phone || senderPhone,
+                        social_network: existingReverseContact.social_network || senderSocial,
+                        notes: existingReverseContact.notes || senderNotes,
+                    })
+                    .eq('id', existingReverseContact.id);
+
+                if (reverseUpdateError) throw reverseUpdateError;
+                return;
+            }
+
+            const { error: reverseInsertError } = await supabase.from('contacts').insert([
+                {
+                    user_id: request.to_user_id,
+                    name: senderName,
+                    email: senderEmail,
+                    phone: senderPhone,
+                    notes: senderNotes,
+                    social_network: senderSocial,
+                    target_user_id: request.from_user_id,
+                    link_status: 'accepted',
+                },
+            ]);
+
+            if (reverseInsertError) throw reverseInsertError;
             return;
         }
 
-        // 2. Perform based on type
-        if (action === 'approved') {
-            if (request.type === 'loan_validation') {
-                await supabase.from('loans').update({ validation_status: 'approved' }).eq('id', request.loan_id);
-            } else if (request.type === 'payment_validation') {
-                await supabase.from('payments').update({ validation_status: 'approved' }).eq('id', request.payment_id);
-            } else if (request.type === 'debt_reduction') {
-                // Logic for debt reduction would go here (e.g. updating loan amount)
-                // request.data might contain the reduction amount
-            }
-        } else {
-            if (request.type === 'loan_validation') {
-                await supabase.from('loans').update({ validation_status: 'rejected' }).eq('id', request.loan_id);
-            } else if (request.type === 'payment_validation') {
-                await supabase.from('payments').update({ validation_status: 'rejected' }).eq('id', request.payment_id);
-            }
+        if (request.type === 'loan_validation') {
+            const { error } = await supabase.from('loans').update({ validation_status: 'approved' }).eq('id', request.loan_id);
+            if (error) throw error;
+            return;
         }
 
-        Alert.alert('Success', `Request ${action} successfully`);
-        fetchRequests();
+        if (request.type === 'payment_validation') {
+            const { error } = await supabase.from('payments').update({ validation_status: 'approved' }).eq('id', request.payment_id);
+            if (error) throw error;
+            return;
+        }
+
+        if (request.type === 'debt_reduction') {
+            const { data: loanRecord, error: loanError } = await supabase
+                .from('loans')
+                .select('id, amount')
+                .eq('id', request.loan_id)
+                .maybeSingle();
+
+            if (loanError) throw loanError;
+            if (!loanRecord) throw new Error('Shared record not found.');
+
+            const currentAmount = Number(loanRecord.amount || 0);
+            const nextAmount = getRequestedLoanAmount({
+                currentAmount,
+                requestPayload: request.request_payload,
+                message: request.message,
+            });
+
+            if (!Number.isFinite(nextAmount)) {
+                throw new Error('This request is missing the proposed total.');
+            }
+
+            const { data: payments, error: paymentsError } = await supabase
+                .from('payments')
+                .select('amount, payment_method')
+                .eq('loan_id', request.loan_id);
+
+            if (paymentsError) throw paymentsError;
+
+            const totalPaid = (payments || []).reduce((acc: number, payment: any) => {
+                if (payment.payment_method === 'item') return acc;
+                return acc + Number(payment.amount || 0);
+            }, 0);
+
+            let nextStatus: 'active' | 'partial' | 'paid' = 'active';
+            if ((nextAmount as number) <= totalPaid) nextStatus = 'paid';
+            else if (totalPaid > 0) nextStatus = 'partial';
+
+            const { error: updateError } = await supabase
+                .from('loans')
+                .update({ amount: nextAmount, status: nextStatus })
+                .eq('id', request.loan_id);
+
+            if (updateError) throw updateError;
+        }
+    };
+
+    const applyRejectedRequest = async (request: any) => {
+        if (request.type === 'friend_request') {
+            const { error } = await supabase
+                .from('contacts')
+                .update({
+                    target_user_id: null,
+                    link_status: 'private',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('user_id', request.from_user_id)
+                .eq('target_user_id', request.to_user_id)
+                .eq('link_status', 'pending');
+
+            if (error) throw error;
+            return;
+        }
+
+        if (request.type === 'loan_validation') {
+            const { error } = await supabase.from('loans').update({ validation_status: 'rejected' }).eq('id', request.loan_id);
+            if (error) throw error;
+            return;
+        }
+
+        if (request.type === 'payment_validation') {
+            const { error } = await supabase.from('payments').update({ validation_status: 'rejected' }).eq('id', request.payment_id);
+            if (error) throw error;
+        }
+    };
+
+    const handleAction = async (request: any, action: 'approved' | 'rejected') => {
+        setLoading(true);
+
+        try {
+            if (action === 'approved') {
+                await applyApprovedRequest(request);
+            } else {
+                await applyRejectedRequest(request);
+            }
+
+            const { error: requestError } = await supabase
+                .from('p2p_requests')
+                .update({ status: action, updated_at: new Date().toISOString() })
+                .eq('id', request.id);
+
+            if (requestError) {
+                throw requestError;
+            }
+
+            Alert.alert('Success', getRequestActionMessage(request.type, action));
+            await fetchRequests();
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Something went wrong while updating this request.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const renderRequestItem = ({ item }: { item: any }) => (
@@ -75,16 +270,13 @@ export default function RequestsScreen() {
             <RNView style={styles.requestHeader}>
                 <RNView style={styles.iconContainer}>
                     {item.type === 'loan_validation' ? <Wallet size={20} color="#6366F1" /> :
+                        item.type === 'friend_request' ? <UserPlus size={20} color="#4F46E5" /> :
                         item.type === 'payment_validation' ? <Check size={20} color="#10B981" /> :
                             <ArrowDownLeft size={20} color="#F59E0B" />}
                 </RNView>
                 <RNView style={styles.headerInfo}>
-                    <Text style={styles.requestType}>
-                        {item.type === 'loan_validation' ? 'Lend/Borrow Validation' :
-                            item.type === 'payment_validation' ? 'Payment Validation' :
-                                'Debt Reduction Request'}
-                    </Text>
-                    <Text style={styles.requestFrom}>from {item.from_profile?.full_name || item.from_profile?.email}</Text>
+                    <Text style={styles.requestType}>{getRequestTypeLabel(item.type)}</Text>
+                    <Text style={styles.requestFrom}>from {getDisplayName(item.from_profile)}</Text>
                 </RNView>
             </RNView>
 
@@ -97,7 +289,7 @@ export default function RequestsScreen() {
                     disabled={loading}
                 >
                     <X size={18} color="#EF4444" />
-                    <Text style={styles.rejectText}>Reject</Text>
+                    <Text style={styles.rejectText}>Decline</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={[styles.actionBtn, styles.approveBtn]}
@@ -105,7 +297,7 @@ export default function RequestsScreen() {
                     disabled={loading}
                 >
                     <Check size={18} color="#fff" />
-                    <Text style={styles.approveText}>Approve</Text>
+                    <Text style={styles.approveText}>Confirm</Text>
                 </TouchableOpacity>
             </RNView>
         </Card>
@@ -114,7 +306,7 @@ export default function RequestsScreen() {
     return (
         <Screen style={styles.container}>
             <Stack.Screen options={{
-                title: 'Pending Requests',
+                title: t('Pending Confirmations'),
                 headerTransparent: true,
                 headerTintColor: '#0F172A',
             }} />
@@ -130,8 +322,8 @@ export default function RequestsScreen() {
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Bell size={48} color="#CBD5E1" />
-                        <Text style={styles.emptyTitle}>No pending requests</Text>
-                        <Text style={styles.emptyDesc}>When someone links a transaction with you, it will appear here.</Text>
+                        <Text style={styles.emptyTitle}>No pending confirmations</Text>
+                        <Text style={styles.emptyDesc}>When someone shares or updates a record with you, it will show up here.</Text>
                     </View>
                 }
                 ListFooterComponent={<Text style={styles.copyright}>© 2026 I GOT YOU</Text>}

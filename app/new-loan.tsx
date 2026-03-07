@@ -4,12 +4,13 @@ import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
-import { X, Camera, Wallet, Box, Plus, ChevronDown, BellDot, FileText } from 'lucide-react-native';
+import { X, Camera, Wallet, Box, Plus, ChevronDown, BellDot, FileText, UserPlus, Check, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { scheduleLoanReminderForUser } from '@/services/notificationService';
 import { CURRENCIES, getCurrencySymbol } from '@/constants/Currencies';
 import { getOrCreateUserPreferences, sanitizePreferredCurrencies, updateUserPreferences } from '@/services/userPreferences';
+import { countActiveRecords, PLAN_LIMITS } from '@/services/subscriptionPlan';
 
 const REMINDER_OPTIONS = [
   { label: 'Off', value: 'none' },
@@ -29,8 +30,8 @@ const DUE_PRESETS = [
 const TRANSACTION_PRESETS = [
   {
     key: 'lent-money',
-    title: 'I lent money',
-    subtitle: 'Track money someone should return to you.',
+    title: 'Lend money',
+    subtitle: 'Someone should pay you back.',
     category: 'money' as const,
     type: 'lent' as const,
     accent: '#10B981',
@@ -38,8 +39,8 @@ const TRANSACTION_PRESETS = [
   },
   {
     key: 'borrowed-money',
-    title: 'I borrowed money',
-    subtitle: 'Track money you need to pay back.',
+    title: 'Borrow money',
+    subtitle: 'You need to pay this back.',
     category: 'money' as const,
     type: 'borrowed' as const,
     accent: '#EF4444',
@@ -47,8 +48,8 @@ const TRANSACTION_PRESETS = [
   },
   {
     key: 'lent-item',
-    title: 'I gave an item',
-    subtitle: 'Track a personal item you want back.',
+    title: 'Give item',
+    subtitle: 'You want this item back.',
     category: 'item' as const,
     type: 'lent' as const,
     accent: '#0F172A',
@@ -56,8 +57,8 @@ const TRANSACTION_PRESETS = [
   },
   {
     key: 'borrowed-item',
-    title: 'I received an item',
-    subtitle: 'Track an item you need to return.',
+    title: 'Receive item',
+    subtitle: 'You need to return this item.',
     category: 'item' as const,
     type: 'borrowed' as const,
     accent: '#6366F1',
@@ -68,7 +69,7 @@ const TRANSACTION_PRESETS = [
 type ReminderFrequency = 'none' | 'daily' | 'weekly' | 'custom' | 'monthly' | 'yearly';
 
 export default function NewLoanScreen() {
-  const { user } = useAuthStore();
+  const { user, planTier } = useAuthStore();
   const router = useRouter();
 
   const [category, setCategory] = useState<'money' | 'item'>('money');
@@ -86,6 +87,8 @@ export default function NewLoanScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [availableCurrencies, setAvailableCurrencies] = useState<string[]>(['USD']);
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
+  const [contactPickerVisible, setContactPickerVisible] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const base64StringRef = useRef<string | null>(null);
 
@@ -144,11 +147,11 @@ export default function NewLoanScreen() {
     if (!user) return;
     const { data } = await supabase
       .from('contacts')
-      .select('id, name, target_user_id')
+      .select('id, name, target_user_id, link_status')
       .eq('user_id', user.id)
       .is('deleted_at', null);
 
-    const newContacts = data || [];
+    const newContacts = [...(data || [])].sort((left, right) => left.name.localeCompare(right.name));
 
     if (newContacts.length > contacts.length) {
       const addedContact = newContacts.find((nc) => !contacts.some((oc) => oc.id === nc.id));
@@ -210,6 +213,25 @@ export default function NewLoanScreen() {
 
     setLoading(true);
     try {
+      if (planTier === 'free' && user?.id) {
+        const { count, error: countError } = await countActiveRecords(user.id);
+        if (countError) {
+          throw countError;
+        }
+
+        if (count >= PLAN_LIMITS.free.activeRecords) {
+          Alert.alert(
+            'Free plan limit reached',
+            `Free accounts can keep up to ${PLAN_LIMITS.free.activeRecords} active records. Upgrade to Premium to unlock unlimited records.`,
+            [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'View plans', onPress: () => router.push('/subscription' as any) },
+            ]
+          );
+          return;
+        }
+      }
+
       let evidenceUrl: string | null = null;
 
       if (image && base64StringRef.current) {
@@ -225,7 +247,7 @@ export default function NewLoanScreen() {
       }
 
       const selectedContact = contacts.find((c) => c.id === contactId);
-      const targetUserId = selectedContact?.target_user_id;
+      const targetUserId = selectedContact?.link_status === 'accepted' ? selectedContact?.target_user_id : null;
       if (!user?.id) {
         throw new Error('You need to be signed in before saving a transaction.');
       }
@@ -302,7 +324,7 @@ export default function NewLoanScreen() {
             loan_id: newLoan.id,
             from_user_id: user.id,
             to_user_id: targetUserId,
-            message: `New ${category} ${type === 'lent' ? 'lent' : 'borrowed'} transaction recorded with you.`,
+            message: `A shared record was added with you. Please confirm the details.`,
             status: 'pending',
           },
         ]);
@@ -334,6 +356,14 @@ export default function NewLoanScreen() {
 
   const selectedPreset = TRANSACTION_PRESETS.find((preset) => preset.category === category && preset.type === type) || TRANSACTION_PRESETS[0];
   const selectedContact = contacts.find((contact) => contact.id === contactId);
+  const selectedContactLinkStatus = String(selectedContact?.link_status || (selectedContact?.target_user_id ? 'accepted' : 'private')).toLowerCase();
+  const selectedContactIsLinked = selectedContactLinkStatus === 'accepted';
+  const selectedContactIsPending = selectedContactLinkStatus === 'pending';
+  const normalizedContactSearch = contactSearchQuery.trim().toLowerCase();
+  const filteredContacts = contacts.filter((contact) => {
+    if (!normalizedContactSearch) return true;
+    return contact.name.toLowerCase().includes(normalizedContactSearch);
+  });
   const dueLabel = dueDate ? formatDueLabel(dueDate) : 'No due date selected';
 
   return (
@@ -365,7 +395,7 @@ export default function NewLoanScreen() {
           <Card style={styles.heroCard}>
             <Text style={styles.eyebrow}>Quick record</Text>
             <Text style={styles.heroTitle}>What happened?</Text>
-            <Text style={styles.heroText}>Pick the closest action. The form below will only show what matters for that kind of record.</Text>
+            <Text style={styles.heroText}>Choose one to start. The form below adapts automatically.</Text>
           </Card>
 
           <View style={styles.presetGrid}>
@@ -379,10 +409,10 @@ export default function NewLoanScreen() {
                   onPress={() => applyPreset(preset.category, preset.type)}
                 >
                   <RNView style={[styles.presetIcon, { backgroundColor: `${preset.accent}18` }]}>
-                    <Icon size={20} color={preset.accent} />
+                    <Icon size={18} color={preset.accent} />
                   </RNView>
                   <Text style={styles.presetTitle}>{preset.title}</Text>
-                  <Text style={styles.presetSubtitle}>{preset.subtitle}</Text>
+                  <Text style={styles.presetSubtitle} numberOfLines={2}>{preset.subtitle}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -438,30 +468,60 @@ export default function NewLoanScreen() {
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>Contact</Text>
-                <TouchableOpacity onPress={() => router.push('/new-contact')}>
-                  <Text style={styles.linkText}>+ New Contact</Text>
-                </TouchableOpacity>
+                <RNView style={styles.labelActions}>
+                  <TouchableOpacity onPress={() => router.push('/new-contact?mode=friend')}>
+                    <Text style={styles.linkText}>+ Add friend</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/new-contact')}>
+                    <Text style={styles.linkTextMuted}>+ New contact</Text>
+                  </TouchableOpacity>
+                </RNView>
               </View>
               {contacts.length === 0 ? (
                 <Card style={styles.emptyInlineCard}>
-                  <Text style={styles.emptyInlineText}>Add a contact first so this record has someone attached to it.</Text>
-                  <TouchableOpacity style={styles.emptyInlineButton} onPress={() => router.push('/new-contact')}>
-                    <Text style={styles.emptyInlineButtonText}>Add contact</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.emptyInlineText}>Add a friend or contact first so this record has someone attached to it.</Text>
+                  <RNView style={styles.emptyInlineActions}>
+                    <TouchableOpacity style={styles.emptyInlineButton} onPress={() => router.push('/new-contact?mode=friend')}>
+                      <UserPlus size={16} color="#FFFFFF" />
+                      <Text style={styles.emptyInlineButtonText}>Add friend</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.emptyInlineSecondaryButton} onPress={() => router.push('/new-contact')}>
+                      <Text style={styles.emptyInlineSecondaryButtonText}>New contact</Text>
+                    </TouchableOpacity>
+                  </RNView>
                 </Card>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.inlineList}>
-                  {contacts.map((contact) => (
-                    <TouchableOpacity
-                      key={contact.id}
-                      onPress={() => setContactId(contact.id)}
-                      style={[styles.contactChip, contactId === contact.id && styles.contactChipActive]}
-                    >
-                      <Text style={[styles.contactChipText, contactId === contact.id && styles.contactChipTextActive]}>{contact.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.selectInput, contactPickerVisible && styles.selectInputActive]}
+                  onPress={() => setContactPickerVisible(true)}
+                >
+                  <RNView style={styles.selectInputLeft}>
+                    <Text style={[styles.selectInputText, !selectedContact && styles.selectInputPlaceholder]}>
+                      {selectedContact ? selectedContact.name : 'Select a contact'}
+                    </Text>
+                  </RNView>
+                  <ChevronDown size={18} color="#64748B" />
+                </TouchableOpacity>
               )}
+              {selectedContact ? (
+                <Card style={[styles.contactStatusCard, selectedContactIsLinked ? styles.contactStatusCardLinked : styles.contactStatusCardPrivate]}>
+                  <Text style={styles.contactStatusTitle}>
+                    {selectedContactIsLinked ? 'Shared friend linked' : selectedContactIsPending ? 'Friend request pending' : 'Private contact'}
+                  </Text>
+                  <Text style={styles.contactStatusText}>
+                    {selectedContactIsLinked
+                      ? 'This person is linked inside the app, so they can confirm and follow shared records.'
+                      : selectedContactIsPending
+                      ? 'This contact is waiting for the other person to accept your friend request. Shared confirmations will start after they accept.'
+                      : 'This record stays private until you link this contact with a friend code.'}
+                  </Text>
+                  {!selectedContactIsLinked && !selectedContactIsPending ? (
+                    <TouchableOpacity onPress={() => router.push(`/new-contact?id=${selectedContact.id}&mode=friend`)}>
+                      <Text style={styles.contactStatusLink}>Link this contact</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </Card>
+              ) : null}
             </View>
           </Card>
 
@@ -613,6 +673,76 @@ export default function NewLoanScreen() {
             </RNView>
           </Modal>
 
+          <Modal
+            animationType="slide"
+            transparent
+            visible={contactPickerVisible}
+            onRequestClose={() => setContactPickerVisible(false)}
+          >
+            <RNView style={styles.currencyModalOverlay}>
+              <Card style={styles.contactModalCard}>
+                <RNView style={styles.contactModalHeader}>
+                  <Text style={styles.currencyModalTitle}>Choose Contact</Text>
+                  <TouchableOpacity
+                    style={styles.contactModalCloseButton}
+                    onPress={() => {
+                      setContactPickerVisible(false);
+                      setContactSearchQuery('');
+                    }}
+                  >
+                    <Text style={styles.contactModalCloseButtonText}>Done</Text>
+                  </TouchableOpacity>
+                </RNView>
+
+                <RNView style={styles.contactSearchBox}>
+                  <Search size={16} color="#94A3B8" />
+                  <TextInput
+                    placeholder="Search contacts..."
+                    placeholderTextColor="#94A3B8"
+                    value={contactSearchQuery}
+                    onChangeText={setContactSearchQuery}
+                    style={styles.contactSearchInput}
+                  />
+                </RNView>
+
+                <ScrollView style={styles.currencyModalList} keyboardShouldPersistTaps="handled">
+                  {filteredContacts.map((contact) => {
+                    const active = contact.id === contactId;
+                    return (
+                      <TouchableOpacity
+                        key={contact.id}
+                        style={styles.contactModalItem}
+                        onPress={() => {
+                          setContactId(contact.id);
+                          setContactPickerVisible(false);
+                          setContactSearchQuery('');
+                        }}
+                      >
+                        <RNView style={styles.contactModalItemBody}>
+                          <Text style={styles.contactModalItemTitle}>{contact.name}</Text>
+                          <Text style={styles.contactModalItemMeta}>
+                            {contact.link_status === 'accepted'
+                              ? 'Linked friend'
+                              : contact.link_status === 'pending'
+                              ? 'Pending acceptance'
+                              : 'Private contact'}
+                          </Text>
+                        </RNView>
+                        {active ? <Check size={18} color="#4F46E5" /> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {filteredContacts.length === 0 ? (
+                    <RNView style={styles.contactModalEmpty}>
+                      <Text style={styles.contactModalEmptyText}>No contacts match that search.</Text>
+                    </RNView>
+                  ) : null}
+                </ScrollView>
+              </Card>
+            </RNView>
+          </Modal>
+
           <TouchableOpacity onPress={onSave} disabled={loading} style={[styles.saveButton, loading && styles.saveButtonDisabled]}>
             <Text style={styles.saveButtonText}>{loading ? 'Saving...' : 'Save Transaction'}</Text>
           </TouchableOpacity>
@@ -668,34 +798,40 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heroCard: {
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   eyebrow: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
     textTransform: 'uppercase',
     color: '#64748B',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   heroTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     color: '#0F172A',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   heroText: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
     color: '#64748B',
   },
   presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     gap: 12,
     backgroundColor: 'transparent',
   },
   presetCard: {
+    width: '48%',
     borderRadius: 22,
-    padding: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -708,22 +844,22 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   presetIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   presetTitle: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   presetSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 17,
     color: '#64748B',
   },
   sectionCard: {
@@ -763,10 +899,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginBottom: 10,
   },
+  labelActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
   linkText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#6366F1',
+  },
+  linkTextMuted: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
   },
   amountInputContainer: {
     flexDirection: 'row',
@@ -859,8 +1006,17 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginBottom: 12,
   },
+  emptyInlineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
   emptyInlineButton: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
@@ -870,25 +1026,75 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  contactChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 999,
+  emptyInlineSecondaryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#CBD5E1',
   },
-  contactChipActive: {
-    backgroundColor: '#E0E7FF',
+  emptyInlineSecondaryButtonText: {
+    color: '#475569',
+    fontWeight: '700',
+  },
+  selectInput: {
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectInputActive: {
     borderColor: '#6366F1',
   },
-  contactChipText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
+  selectInputLeft: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    marginRight: 12,
   },
-  contactChipTextActive: {
-    color: '#3730A3',
+  selectInputText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  selectInputPlaceholder: {
+    color: '#94A3B8',
+  },
+  contactStatusCard: {
+    marginTop: 12,
+    padding: 16,
+  },
+  contactStatusCardLinked: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  contactStatusCardPrivate: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FED7AA',
+  },
+  contactStatusTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  contactStatusText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#475569',
+  },
+  contactStatusLink: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4F46E5',
   },
   moreToggle: {
     borderRadius: 22,
@@ -995,11 +1201,83 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '70%',
   },
+  contactModalCard: {
+    padding: 20,
+    maxHeight: '78%',
+  },
+  contactModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    marginBottom: 16,
+  },
+  contactModalCloseButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  contactModalCloseButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4F46E5',
+  },
+  contactSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#F8FAFC',
+    marginBottom: 16,
+  },
+  contactSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0F172A',
+    paddingVertical: 0,
+  },
+  contactModalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: 'transparent',
+  },
+  contactModalItemBody: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    marginRight: 12,
+  },
+  contactModalItemTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 3,
+  },
+  contactModalItemMeta: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  contactModalEmpty: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  contactModalEmptyText: {
+    fontSize: 14,
+    color: '#64748B',
+  },
   currencyModalTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
-    marginBottom: 16,
   },
   currencyModalList: {
     marginBottom: 16,
