@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text as RNText, ScrollView, TouchableOpacity, Alert, ActivityIndicator, View as RNView, TextInput, Image, Modal, Platform } from 'react-native';
+import { StyleSheet, Text as RNText, ScrollView, TouchableOpacity, Alert, ActivityIndicator, View as RNView, TextInput, Image, Modal, Platform, RefreshControl } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { useLocalSearchParams, useNavigation, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { CommonActions } from '@react-navigation/native';
@@ -22,6 +22,7 @@ export default function LoanDetailScreen() {
     const [loan, setLoan] = useState<any>(null);
     const [payments, setPayments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [note, setNote] = useState('');
     const [reminderFrequency, setReminderFrequency] = useState<string>('none');
@@ -133,6 +134,16 @@ export default function LoanDetailScreen() {
         setEditDueDate(loanData.due_date || '');
         setPayments(paymentData || []);
         setLoading(false);
+    };
+
+    const handleRefresh = async () => {
+        if (!loanId || !user?.id) return;
+        setRefreshing(true);
+        try {
+            await Promise.all([fetchLoanDetails(), loadCurrencyPreferences()]);
+        } finally {
+            setRefreshing(false);
+        }
     };
 
     const loadCurrencyPreferences = async () => {
@@ -632,7 +643,11 @@ export default function LoanDetailScreen() {
                     )
                 }}
             />
-            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                contentContainerStyle={styles.scroll}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
+            >
                 <Card style={styles.mainCard}>
                     <RNView style={styles.headerRow}>
                         <RNView style={[styles.iconBox, { backgroundColor: loan.category === 'item' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(148, 163, 184, 0.05)' }]}>

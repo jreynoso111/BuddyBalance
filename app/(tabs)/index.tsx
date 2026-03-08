@@ -3,7 +3,7 @@ import { StyleSheet, ScrollView, TouchableOpacity, View as RNView, RefreshContro
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { ArrowUpRight, ArrowDownLeft, Plus, Wallet, Box, Bell, Clock3, AlertTriangle, CheckCircle2, UserPlus } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownLeft, Plus, Wallet, Box, Bell, Clock3, AlertTriangle, CheckCircle2, UserPlus, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -41,11 +41,14 @@ export default function DashboardScreen() {
   const { user } = useAuthStore();
   const greeting = useGreetingStore((state) => state.greetings[state.currentIndex]);
   const [accountName, setAccountName] = useState('');
+  const [friendCode, setFriendCode] = useState('');
+  const [friendCodeReady, setFriendCodeReady] = useState(false);
   const [summary, setSummary] = useState({ lent: 0, borrowed: 0, overdue: 0, dueSoon: 0 });
   const [recentLoans, setRecentLoans] = useState<LoanRecord[]>([]);
   const [dueItems, setDueItems] = useState<LoanRecord[]>([]);
   const [requestCount, setRequestCount] = useState(0);
   const [recordCount, setRecordCount] = useState(0);
+  const [expandedRecentRecordId, setExpandedRecentRecordId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const fetchInFlightRef = useRef(false);
 
@@ -104,7 +107,7 @@ export default function DashboardScreen() {
       }
 
       const [profileResult, loansResult, paymentsResult, requestsResult] = await Promise.all([
-        supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
+        supabase.from('profiles').select('full_name, friend_code').eq('id', user.id).maybeSingle(),
         supabase
           .from('loans')
           .select('id, amount, type, status, category, created_at, due_date, item_name, currency, contacts(name)')
@@ -123,11 +126,25 @@ export default function DashboardScreen() {
       ]);
 
       const profileName = typeof profileResult.data?.full_name === 'string' ? profileResult.data.full_name.trim() : '';
+      let resolvedFriendCode = String((profileResult.data as any)?.friend_code || '').trim();
+
+      if (!resolvedFriendCode) {
+        const { data: ensuredCode, error: ensureError } = await supabase.rpc('ensure_my_friend_code');
+        if (ensureError) {
+          console.error('dashboard friend code ensure failed:', ensureError.message);
+        } else {
+          resolvedFriendCode = String(ensuredCode || '').trim();
+        }
+      }
+
       if (profileName) {
         setAccountName(profileName);
       } else if (!profileNameFromMetadata) {
         setAccountName('');
       }
+
+      setFriendCode(resolvedFriendCode);
+      setFriendCodeReady(Boolean(resolvedFriendCode));
 
       const allLoans = (loansResult.data || []) as LoanRecord[];
       const allPayments = (paymentsResult.data || []) as PaymentRecord[];
@@ -254,14 +271,24 @@ export default function DashboardScreen() {
         </View>
 
         <RNView style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => router.push('/new-loan')}>
-            <Plus size={18} color="#FFFFFF" />
-            <Text style={styles.actionButtonPrimaryText}>New record</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={() => router.push('/new-contact?mode=friend')}>
-            <UserPlus size={18} color="#4F46E5" />
-            <Text style={styles.actionButtonSecondaryText}>Add friend</Text>
-          </TouchableOpacity>
+          <RNView style={styles.actionColumn}>
+            <TouchableOpacity style={[styles.actionButton, styles.actionButtonPrimary]} onPress={() => router.push('/new-loan')}>
+              <Plus size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonPrimaryText}>New record</Text>
+            </TouchableOpacity>
+          </RNView>
+          <RNView style={styles.actionColumn}>
+            <TouchableOpacity style={[styles.actionButton, styles.actionButtonSecondary]} onPress={() => router.push('/new-contact?mode=friend')}>
+              <UserPlus size={18} color="#4F46E5" />
+              <Text style={styles.actionButtonSecondaryText}>Add friend</Text>
+            </TouchableOpacity>
+            <Text style={styles.friendCodeCaption}>
+              Friend code:{' '}
+              <Text style={styles.friendCodeValue}>
+                {friendCodeReady ? friendCode : 'Generating...'}
+              </Text>
+            </Text>
+          </RNView>
         </RNView>
 
         <Card style={styles.balanceCard}>
@@ -414,9 +441,13 @@ export default function DashboardScreen() {
             </Card>
           ) : (
             recentLoans.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.listItemWrapper} onPress={() => router.push(`/loan/${item.id}`)}>
-                <Card style={styles.listCard}>
-                  <RNView style={styles.listLeft}>
+              <Card key={item.id} style={[styles.listCard, styles.recentRecordCard]}>
+                <RNView style={styles.recentRecordHeader}>
+                  <TouchableOpacity
+                    style={styles.listLeft}
+                    activeOpacity={0.85}
+                    onPress={() => router.push(`/loan/${item.id}`)}
+                  >
                     <RNView style={[styles.iconBox, { backgroundColor: item.category === 'item' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(148, 163, 184, 0.08)' }]}>
                       {item.category === 'item' ? (
                         <Box size={20} color="#6366F1" />
@@ -426,15 +457,42 @@ export default function DashboardScreen() {
                     </RNView>
                     <View style={styles.listInfo}>
                       <Text style={styles.listName}>{item.contacts?.name || 'Unknown contact'}</Text>
-                      <Text style={styles.listSub}>{getRecordDescriptor(item)}</Text>
+                      <Text style={styles.recentRecordSummary}>{getRecentRecordSummary(item)}</Text>
                     </View>
+                  </TouchableOpacity>
+                  <RNView style={styles.recentRecordHeaderRight}>
+                    <RNView style={styles.listRight}>
+                      <Text style={[styles.amountText, { color: item.category === 'money' ? (item.type === 'lent' ? '#10B981' : '#EF4444') : '#6366F1' }]}>{getRecentRecordValue(item)}</Text>
+                      <Text style={styles.statusBadge}>{item.status}</Text>
+                    </RNView>
+                    <TouchableOpacity
+                      style={styles.expandToggle}
+                      activeOpacity={0.85}
+                      onPress={() => setExpandedRecentRecordId((current) => current === item.id ? null : item.id)}
+                    >
+                      {expandedRecentRecordId === item.id ? (
+                        <ChevronUp size={18} color="#64748B" />
+                      ) : (
+                        <ChevronDown size={18} color="#64748B" />
+                      )}
+                    </TouchableOpacity>
                   </RNView>
-                  <RNView style={styles.listRight}>
-                    <Text style={[styles.amountText, { color: item.category === 'money' ? (item.type === 'lent' ? '#10B981' : '#EF4444') : '#6366F1' }]}>{getRecentRecordValue(item)}</Text>
-                    <Text style={styles.statusBadge}>{item.status}</Text>
+                </RNView>
+
+                {expandedRecentRecordId === item.id ? (
+                  <RNView style={styles.recentRecordExpanded}>
+                    <Text style={styles.listSub}>{getRecordDescriptor(item)}</Text>
+                    <Text style={styles.recentRecordMeta}>{getRecentRecordMeta(item)}</Text>
+                    <TouchableOpacity
+                      style={styles.recentRecordOpenButton}
+                      activeOpacity={0.85}
+                      onPress={() => router.push(`/loan/${item.id}`)}
+                    >
+                      <Text style={styles.recentRecordOpenButtonText}>Open record</Text>
+                    </TouchableOpacity>
                   </RNView>
-                </Card>
-              </TouchableOpacity>
+                ) : null}
+              </Card>
             ))
           )}
         </View>
@@ -484,6 +542,16 @@ function getDueDescriptor(dueDate: string | null) {
   return `${Math.abs(diffDays)} days overdue`;
 }
 
+function formatActivityDate(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
+}
+
 function getRecordDescriptor(item: LoanRecord) {
   if (item.last_payment_at && item.last_activity_at === item.last_payment_at) {
     if (item.last_payment_method === 'item') {
@@ -531,6 +599,20 @@ function getRecentRecordValue(item: LoanRecord) {
   return getRecordValue(item);
 }
 
+function getRecentRecordSummary(item: LoanRecord) {
+  if (item.category === 'item') {
+    return item.item_name || 'Item record';
+  }
+
+  return item.type === 'lent' ? 'You lent money' : 'You borrowed money';
+}
+
+function getRecentRecordMeta(item: LoanRecord) {
+  const activityDate = item.last_activity_at || item.created_at;
+  const label = item.last_payment_at && item.last_activity_at === item.last_payment_at ? 'Updated' : 'Created';
+  return `${label} ${formatActivityDate(activityDate)}`;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -570,8 +652,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: 'transparent',
   },
-  actionButton: {
+  actionColumn: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  actionButton: {
     minHeight: 52,
     borderRadius: 16,
     paddingHorizontal: 16,
@@ -597,6 +682,18 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontSize: 15,
     fontWeight: '800',
+  },
+  friendCodeCaption: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 8,
+    paddingHorizontal: 4,
+    textAlign: 'center',
+  },
+  friendCodeValue: {
+    color: '#0F172A',
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   requestIcon: {
     padding: 10,
@@ -856,6 +953,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
   },
+  recentRecordCard: {
+    marginBottom: 12,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  recentRecordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  recentRecordHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    marginLeft: 12,
+  },
   listLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -891,10 +1004,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#64748B',
   },
+  recentRecordSummary: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+  },
   listRight: {
     alignItems: 'flex-end',
     backgroundColor: 'transparent',
-    marginLeft: 12,
   },
   amountText: {
     fontSize: 16,
@@ -906,6 +1023,41 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '700',
     marginTop: 4,
+  },
+  expandToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginLeft: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  recentRecordExpanded: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: 'transparent',
+  },
+  recentRecordMeta: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  recentRecordOpenButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recentRecordOpenButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#4F46E5',
   },
   fab: {
     position: 'absolute',

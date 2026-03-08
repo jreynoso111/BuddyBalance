@@ -270,106 +270,128 @@ export default function RegisterPaymentScreen() {
         const parsedMoneyAmount = Number.parseFloat(amount);
         const moneyAmountValue = Number.isNaN(parsedMoneyAmount) ? null : parsedMoneyAmount;
         setLoading(true);
+        try {
+            const { data: loanData, error: loanError } = await supabase
+                .from('loans')
+                .select('target_user_id')
+                .eq('id', normalizedLoanId)
+                .single();
 
-        // Fetch target_user_id from loan
-        const { data: loanData } = await supabase
-            .from('loans')
-            .select('target_user_id')
-            .eq('id', normalizedLoanId)
-            .single();
-
-        const targetUserId = loanData?.target_user_id;
-
-        if (normalizedPaymentId) {
-            // 1. Update Payment
-            const { error: updateError } = await supabase
-                .from('payments')
-                .update({
-                    amount: paymentMethod === 'money' ? moneyAmountValue : null,
-                    payment_method: paymentMethod,
-                    returned_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
-                    note: note.trim() || null,
-                    validation_status: targetUserId ? 'pending' : 'none',
-                })
-                .eq('id', normalizedPaymentId);
-
-            if (updateError) {
-                Alert.alert('Error', updateError.message);
-                setLoading(false);
-                return;
+            if (loanError) {
+                throw loanError;
             }
 
-            // 2. Log History
-            await supabase.from('payment_history').insert([
-                {
-                    payment_id: normalizedPaymentId,
-                    changed_by: user?.id,
-                    old_amount: originalPayment.amount,
-                    new_amount: paymentMethod === 'money' ? moneyAmountValue : null,
-                    old_note: originalPayment.note,
-                    new_note: note.trim() || null,
-                    old_item_name: originalPayment.returned_item_name,
-                    new_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
-                    change_reason: 'User update',
+            const targetUserId = loanData?.target_user_id;
+
+            if (normalizedPaymentId) {
+                const previousPaymentState = {
+                    amount: originalPayment?.amount ?? null,
+                    payment_method: originalPayment?.payment_method ?? 'money',
+                    returned_item_name: originalPayment?.returned_item_name ?? null,
+                    note: originalPayment?.note ?? null,
+                    validation_status: originalPayment?.validation_status ?? 'none',
+                };
+
+                const { error: updateError } = await supabase
+                    .from('payments')
+                    .update({
+                        amount: paymentMethod === 'money' ? moneyAmountValue : null,
+                        payment_method: paymentMethod,
+                        returned_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
+                        note: note.trim() || null,
+                        validation_status: targetUserId ? 'pending' : 'none',
+                    })
+                    .eq('id', normalizedPaymentId);
+
+                if (updateError) {
+                    throw updateError;
                 }
-            ]);
 
-            if (targetUserId) {
-                // Update or Create P2P request for edit
-                await supabase.from('p2p_requests').insert([
+                await supabase.from('payment_history').insert([
                     {
-                        type: 'payment_validation',
-                        loan_id: normalizedLoanId,
                         payment_id: normalizedPaymentId,
-                        from_user_id: user?.id,
-                        to_user_id: targetUserId,
-                        message: `A payment on your shared record was updated. Please review.`,
-                        status: 'pending',
-                    },
+                        changed_by: user?.id,
+                        old_amount: originalPayment.amount,
+                        new_amount: paymentMethod === 'money' ? moneyAmountValue : null,
+                        old_note: originalPayment.note,
+                        new_note: note.trim() || null,
+                        old_item_name: originalPayment.returned_item_name,
+                        new_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
+                        change_reason: 'User update',
+                    }
                 ]);
-            }
-        } else {
-            // 1. Insert Payment
-            const { data: newPayment, error: paymentError } = await supabase.from('payments').insert([
-                {
-                    loan_id: normalizedLoanId,
-                    user_id: user?.id,
-                    target_user_id: targetUserId,
-                    amount: paymentMethod === 'money' ? moneyAmountValue : null,
-                    payment_method: paymentMethod,
-                    returned_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
-                    note: note.trim() || null,
-                    payment_date: new Date().toISOString(),
-                    validation_status: targetUserId ? 'pending' : 'none',
-                },
-            ]).select().single();
 
-            if (paymentError) {
-                Alert.alert('Error', paymentError.message);
-                setLoading(false);
-                return;
-            }
+                if (targetUserId) {
+                    const { error: requestError } = await supabase.from('p2p_requests').insert([
+                        {
+                            type: 'payment_validation',
+                            loan_id: normalizedLoanId,
+                            payment_id: normalizedPaymentId,
+                            from_user_id: user?.id,
+                            to_user_id: targetUserId,
+                            message: `A payment on your shared record was updated. Please review.`,
+                            status: 'pending',
+                        },
+                    ]);
 
-            if (targetUserId && newPayment) {
-                // Create P2P request for payment validation
-                await supabase.from('p2p_requests').insert([
+                    if (requestError) {
+                        await supabase
+                            .from('payments')
+                            .update(previousPaymentState)
+                            .eq('id', normalizedPaymentId);
+                        throw new Error('The payment update could not be sent for confirmation, so the changes were reverted.');
+                    }
+                }
+            } else {
+                const { data: newPayment, error: paymentError } = await supabase.from('payments').insert([
                     {
-                        type: 'payment_validation',
                         loan_id: normalizedLoanId,
-                        payment_id: newPayment.id,
-                        from_user_id: user?.id,
-                        to_user_id: targetUserId,
-                        message: `A new payment was added to your shared record.`,
-                        status: 'pending',
+                        user_id: user?.id,
+                        target_user_id: targetUserId,
+                        amount: paymentMethod === 'money' ? moneyAmountValue : null,
+                        payment_method: paymentMethod,
+                        returned_item_name: paymentMethod === 'item' ? returnedItem.trim() : null,
+                        note: note.trim() || null,
+                        payment_date: new Date().toISOString(),
+                        validation_status: targetUserId ? 'pending' : 'none',
                     },
-                ]);
+                ]).select().single();
+
+                if (paymentError) {
+                    throw paymentError;
+                }
+
+                if (targetUserId && newPayment) {
+                    const { error: requestError } = await supabase.from('p2p_requests').insert([
+                        {
+                            type: 'payment_validation',
+                            loan_id: normalizedLoanId,
+                            payment_id: newPayment.id,
+                            from_user_id: user?.id,
+                            to_user_id: targetUserId,
+                            message: `A new payment was added to your shared record.`,
+                            status: 'pending',
+                        },
+                    ]);
+
+                    if (requestError) {
+                        await supabase
+                            .from('payments')
+                            .delete()
+                            .eq('id', newPayment.id)
+                            .eq('loan_id', normalizedLoanId);
+                        throw new Error('The payment could not be sent for confirmation, so it was not saved.');
+                    }
+                }
             }
+
+            await syncLoanStatus();
+            goBackToRecord();
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Could not save payment. Please try again.');
+        } finally {
+            setLoading(false);
         }
-
-        await syncLoanStatus();
-
-        goBackToRecord();
-        setLoading(false);
     };
 
     return (

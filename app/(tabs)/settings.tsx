@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image, RefreshControl } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -19,6 +19,8 @@ export default function SettingsScreen() {
     const [prefs, setPrefs] = React.useState(DEFAULT_USER_PREFERENCES);
     const [profileName, setProfileName] = React.useState('');
     const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+    const [refreshing, setRefreshing] = React.useState(false);
+    const [signingOut, setSigningOut] = React.useState(false);
     const normalizedRole = (role || '').toLowerCase().trim();
     const hasAdminAccess = normalizedRole === 'admin' || normalizedRole === 'administrator';
 
@@ -75,25 +77,43 @@ export default function SettingsScreen() {
     };
 
     const handleSignOut = async () => {
-        await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
-        setSession(null);
-        setUser(null);
-        setRole(null);
-        setPlanTier('free');
-        setLanguage('en');
+        if (signingOut) return;
+        setSigningOut(true);
 
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-            Alert.alert('Error', error.message);
-            return;
+        try {
+            await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
+
+            const { error } = await supabase.auth.signOut({ scope: 'local' });
+            if (error) {
+                throw error;
+            }
+
+            setSession(null);
+            setUser(null);
+            setRole(null);
+            setPlanTier('free');
+            setLanguage('en');
+            router.replace('/');
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Could not sign out right now.');
+        } finally {
+            setSigningOut(false);
         }
-
-        router.replace('/');
     };
 
     const handleExport = async () => {
         if (user) {
             await exportLoansToCSV(user.id);
+        }
+    };
+
+    const handleRefresh = async () => {
+        if (!user?.id) return;
+        setRefreshing(true);
+        try {
+            await Promise.all([loadPreferences(), loadProfileSummary()]);
+        } finally {
+            setRefreshing(false);
         }
     };
 
@@ -128,6 +148,7 @@ export default function SettingsScreen() {
                 contentContainerStyle={styles.scrollContent}
                 contentInsetAdjustmentBehavior="never"
                 automaticallyAdjustContentInsets={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
             >
                 <View style={styles.profileSection}>
                     <RNView style={styles.avatarLarge}>
@@ -166,12 +187,12 @@ export default function SettingsScreen() {
                     ))}
                 </Card>
 
-                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} disabled={signingOut}>
                     <LogOut size={20} color="#EF4444" />
-                    <Text style={styles.signOutText}>Sign Out</Text>
+                    <Text style={styles.signOutText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.version}>IOUTrack v1.0.0 • jreynoso</Text>
+                <Text style={styles.version}>Buddy Balance v1.0.0 • jreynoso</Text>
             </ScrollView>
         </Screen>
     );

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, Share, StyleSheet, TextInput, TouchableOpacity, View as RNView } from 'react-native';
+import { Alert, Image, ScrollView, Share, StyleSheet, TextInput, TouchableOpacity, View as RNView, RefreshControl } from 'react-native';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Card, Text, View } from '@/components/Themed';
@@ -27,6 +27,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [friendCodeStatus, setFriendCodeStatus] = useState<'loading' | 'ready' | 'missing'>('loading');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -297,7 +298,7 @@ export default function ProfileScreen() {
 
     try {
       await Share.share({
-        message: `Add me on IOUTrack with friend code ${friendCode}`,
+        message: `Add me on Buddy Balance with friend code ${friendCode}`,
       });
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Could not open the share sheet.');
@@ -305,6 +306,16 @@ export default function ProfileScreen() {
   };
 
   const profileInitial = (fullName || email || user?.email || '?').trim().charAt(0).toUpperCase();
+
+  const handleRefresh = async () => {
+    if (!user?.id) return;
+    setRefreshing(true);
+    try {
+      await loadProfile();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <Screen style={styles.container} safeAreaEdges={['left', 'right', 'bottom']}>
@@ -334,6 +345,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
       >
         <RNView style={styles.inlineNavRow}>
           <TouchableOpacity style={styles.inlineNavButton} onPress={() => router.replace('/(tabs)/settings')}>

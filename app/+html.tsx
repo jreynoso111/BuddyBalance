@@ -11,9 +11,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-        <title>IOUTrack</title>
+        <title>Buddy Balance</title>
         <meta name="theme-color" content="#6366F1" />
-        <meta name="description" content="IOUTrack - track shared loans, payments, and favors with clarity." />
+        <meta name="description" content="Buddy Balance - track shared loans, payments, and favors with clarity." />
 
         {/* 
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native. 
