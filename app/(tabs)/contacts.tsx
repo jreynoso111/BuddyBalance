@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, FlatList, TouchableOpacity, View as RNView, TextInput, useWindowDimensions, Modal, ScrollView } from 'react-native';
+import { StyleSheet, FlatList, TouchableOpacity, View as RNView, TextInput, useWindowDimensions, Modal, ScrollView, RefreshControl } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
-import { UserPlus, Search, ChevronDown, ChevronUp, X } from 'lucide-react-native';
+import { UserPlus, Search, ChevronDown, ChevronUp, X, Link2 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCurrencySymbol } from '@/constants/Currencies';
@@ -61,6 +61,7 @@ type ContactItem = {
 export default function ContactsScreen() {
   const { user } = useAuthStore();
   const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
   const [selectedHistoryContact, setSelectedHistoryContact] = useState<{ name: string; events: ContactHistoryEvent[] } | null>(null);
@@ -187,6 +188,15 @@ export default function ContactsScreen() {
     setSelectedHistoryContact(null);
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchContacts();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <Screen style={styles.container} safeAreaEdges={['left', 'right', 'bottom']}>
       <RNView style={[styles.searchWrapper, { paddingHorizontal: horizontalPadding, paddingTop: isTablet ? 24 : 20 }]}>
@@ -214,6 +224,9 @@ export default function ContactsScreen() {
             paddingBottom: listBottomPadding,
           },
         ]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />
+        }
         ListEmptyComponent={
           <Card style={[styles.emptyCard, maxContentWidth ? { maxWidth: maxContentWidth, alignSelf: 'center', width: '100%' } : null]}>
             <Text style={styles.emptyText}>No contacts found.</Text>
@@ -298,6 +311,46 @@ export default function ContactsScreen() {
                       <Text style={styles.noteText} numberOfLines={3}>{item.notes}</Text>
                     </RNView>
                   ) : null}
+
+                  <RNView style={styles.accountLinkCard}>
+                    <RNView style={styles.accountLinkHeader}>
+                      <RNView style={styles.accountLinkIcon}>
+                        <Link2 size={16} color="#4F46E5" />
+                      </RNView>
+                      <RNView style={styles.accountLinkCopy}>
+                        <Text style={styles.accountLinkTitle}>
+                          {item.link_status === 'accepted'
+                            ? 'Linked to a Buddy Balance account'
+                            : item.link_status === 'pending'
+                              ? 'Friend link pending'
+                              : 'Link this contact to a friend account'}
+                        </Text>
+                        <Text style={styles.accountLinkText}>
+                          {item.link_status === 'accepted'
+                            ? 'Shared records with this person can sync across both accounts.'
+                            : item.link_status === 'pending'
+                              ? 'This friend request is waiting for the other person to accept it.'
+                              : 'If this person uses Buddy Balance, add their friend code to connect both accounts.'}
+                        </Text>
+                      </RNView>
+                    </RNView>
+
+                    {item.link_status !== 'accepted' ? (
+                      <TouchableOpacity
+                        style={styles.accountLinkButton}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/new-contact',
+                            params: { id: item.id, mode: 'friend' },
+                          })
+                        }
+                      >
+                        <Text style={styles.accountLinkButtonText}>
+                          {item.link_status === 'pending' ? 'Review friend link' : 'Link with friend code'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </RNView>
 
                   <RNView style={styles.expandedHeaderRow}>
                     <Text style={styles.expandedSectionTitle}>Recent activity</Text>
@@ -820,6 +873,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: '#334155',
+  },
+  accountLinkCard: {
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    backgroundColor: '#F8FAFF',
+  },
+  accountLinkHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'transparent',
+  },
+  accountLinkIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  accountLinkCopy: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  accountLinkTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#312E81',
+  },
+  accountLinkText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#5B5BD6',
+  },
+  accountLinkButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  accountLinkButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#4F46E5',
   },
   activityList: {
     borderWidth: 1,

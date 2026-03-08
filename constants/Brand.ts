@@ -1,5 +1,5 @@
-export const BRAND_NAME = 'IOUTrack';
-export const BRAND_TAGLINE = 'Track friendly loans and shared records without the friction.';
+export const BRAND_NAME = 'Buddy Balance';
+export const BRAND_TAGLINE = 'Track friendly balances, shared loans, and everyday favors without the friction.';
 
 export const BRAND_COLORS = {
   primary: '#6366F1',

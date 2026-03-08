@@ -141,35 +141,17 @@ export const useAuth = () => {
                 // Keep track of last protected route for refresh/reload recovery.
                 const pathToPersist = isRecoverableProtectedPath(pathname) ? pathname : '/(tabs)';
                 await AsyncStorage.setItem(LAST_PROTECTED_PATH_KEY, pathToPersist);
-            }
-
-            if (session && isLandingPage) {
-                const lastPath = await AsyncStorage.getItem(LAST_PROTECTED_PATH_KEY);
-                const hasSafeRecoverPath =
-                    !!lastPath &&
-                    lastPath !== pathname &&
-                    isRecoverableProtectedPath(lastPath);
-
-                if (hasSafeRecoverPath) {
-                    router.replace(lastPath as any);
-                    return;
-                }
-
-                await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
-                // Fallback to authenticated home when there is no recoverable path.
-                router.replace('/(tabs)');
                 return;
             }
 
             if (!session && !inAuthRoute && !isLandingPage && !isEphemeralFormRoute) {
                 // User is not signed in and not in the auth group or landing page, redirect to landing page
-                router.replace('/');
-            } else if (session && inAuthRoute && !isResetPassword) {
-                // User is signed in and in the auth group, redirect to home
-                router.replace('/(tabs)');
+                if (pathname !== '/') {
+                    router.replace('/');
+                }
             }
         };
 
         void handleRouting();
-    }, [session, pathname, initialized, segments]);
+    }, [initialized, pathname, router, segments, session]);
 };

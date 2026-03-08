@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, Image, View as RNView, Modal } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, Image, View as RNView, Modal, RefreshControl } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -84,6 +84,7 @@ export default function NewLoanScreen() {
   const [reminderFrequency, setReminderFrequency] = useState<ReminderFrequency>('none');
   const [reminderInterval, setReminderInterval] = useState('1');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [image, setImage] = useState<string | null>(null);
   const [availableCurrencies, setAvailableCurrencies] = useState<string[]>(['USD']);
   const [currencyPickerVisible, setCurrencyPickerVisible] = useState(false);
@@ -161,6 +162,16 @@ export default function NewLoanScreen() {
     }
 
     setContacts(newContacts);
+  };
+
+  const handleRefresh = async () => {
+    if (!user?.id) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchContacts(), loadCurrencyPreferences()]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const getDefaultDueDate = () => getDateWithOffset(30);
@@ -318,7 +329,7 @@ export default function NewLoanScreen() {
       }
 
       if (targetUserId && newLoan) {
-        await supabase.from('p2p_requests').insert([
+        const { error: requestError } = await supabase.from('p2p_requests').insert([
           {
             type: 'loan_validation',
             loan_id: newLoan.id,
@@ -328,6 +339,31 @@ export default function NewLoanScreen() {
             status: 'pending',
           },
         ]);
+
+        if (requestError) {
+          const { error: deleteLoanError } = await supabase
+            .from('loans')
+            .delete()
+            .eq('id', newLoan.id)
+            .eq('user_id', user.id);
+
+          if (evidenceUrl) {
+            await supabase.storage.from('receipts').remove([evidenceUrl]);
+          }
+
+          if (deleteLoanError) {
+            await supabase
+              .from('loans')
+              .update({
+                target_user_id: null,
+                validation_status: 'none',
+              })
+              .eq('id', newLoan.id)
+              .eq('user_id', user.id);
+          }
+
+          throw new Error('The shared record could not be sent for confirmation, so it was not saved.');
+        }
       }
 
       if (reminderFrequency !== 'none' && newLoan) {
@@ -391,6 +427,7 @@ export default function NewLoanScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
         >
           <Card style={styles.heroCard}>
             <Text style={styles.eyebrow}>Quick record</Text>

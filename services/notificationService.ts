@@ -50,7 +50,7 @@ export async function showSharedUpdateNotification(options: {
 
     const sender = options.fromName?.trim() || 'Someone';
     let title = 'Shared update';
-    let body = options.message?.trim() || `${sender} sent you an update in IOUTrack.`;
+    let body = options.message?.trim() || `${sender} sent you an update in Buddy Balance.`;
 
     if (options.type === 'friend_request') {
         title = 'New friend request';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Text, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, View, TextInput, TouchableOpacity, Text, Alert, KeyboardAvoidingView, Platform, ScrollView, RefreshControl } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -24,7 +24,23 @@ export default function NewContactScreen() {
     const [existingTargetUserId, setExistingTargetUserId] = useState<string | null>(null);
     const [existingLinkStatus, setExistingLinkStatus] = useState<'private' | 'pending' | 'accepted'>('private');
     const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const scrollViewRef = useRef<ScrollView | null>(null);
+    const screenTitle = contactId
+        ? isFriendMode
+            ? 'Link Friend Account'
+            : 'Edit Contact'
+        : isFriendMode
+            ? 'Add Friend'
+            : 'New Contact';
+    const navigateAfterSave = () => {
+        if (isFriendMode) {
+            router.replace('/(tabs)/contacts');
+            return;
+        }
+
+        router.back();
+    };
 
     const normalizeLinkStatus = (value?: string | null): 'private' | 'pending' | 'accepted' => {
         const normalized = String(value || '').toLowerCase().trim();
@@ -111,6 +127,17 @@ export default function NewContactScreen() {
             setExistingLinkStatus(normalizeLinkStatus(data.link_status || (data.target_user_id ? 'accepted' : 'private')));
         }
         setLoading(false);
+    };
+
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        try {
+            if (contactId) {
+                await fetchContact();
+            }
+        } finally {
+            setRefreshing(false);
+        }
     };
 
     const upsertFriendRequest = async (options: {
@@ -293,7 +320,7 @@ export default function NewContactScreen() {
         }
 
         const nextLinkStatus: 'private' | 'pending' | 'accepted' = targetUserId
-            ? existingLinkStatus === 'accepted' && existingTargetUserId === targetUserId && !wantsAccountLink
+            ? existingLinkStatus === 'accepted' && existingTargetUserId === targetUserId
                 ? 'accepted'
                 : 'pending'
             : 'private';
@@ -346,9 +373,9 @@ export default function NewContactScreen() {
                     relationLookupWarning ? 'Saved with warning' : 'Success',
                     relationLookupWarning || (targetUserId && nextLinkStatus === 'pending'
                         ? 'Friend request sent. They will need to accept before shared records sync between both accounts.'
-                        : 'Contact updated successfully')
+                        : 'Contact updated successfully'),
+                    [{ text: 'OK', onPress: navigateAfterSave }]
                 );
-                router.back();
             }
         } else {
             const { data: insertedContact, error } = await supabase.from('contacts').insert([
@@ -389,9 +416,9 @@ export default function NewContactScreen() {
                     relationLookupWarning ? 'Saved with warning' : 'Success',
                     relationLookupWarning || (targetUserId && nextLinkStatus === 'pending'
                         ? 'Friend request sent. They will need to accept before shared records sync between both accounts.'
-                        : 'Contact created successfully')
+                        : 'Contact created successfully'),
+                    [{ text: 'OK', onPress: navigateAfterSave }]
                 );
-                router.back();
             }
         }
 
@@ -473,13 +500,10 @@ export default function NewContactScreen() {
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-            style={[
-                styles.container,
-                Platform.OS === 'ios' ? styles.containerIosOffset : null,
-            ]}
+            style={styles.container}
         >
             <Stack.Screen options={{
-                title: contactId ? 'Edit Contact' : isFriendMode ? 'Add Friend' : 'New Contact',
+                title: screenTitle,
                 headerTransparent: false,
                 headerStyle: {
                     backgroundColor: '#fff',
@@ -498,13 +522,21 @@ export default function NewContactScreen() {
 
             <ScrollView
                 ref={scrollViewRef}
-                contentContainerStyle={[
-                    styles.form,
-                    Platform.OS === 'ios' ? styles.formIosInset : null,
-                ]}
-                contentInsetAdjustmentBehavior="automatic"
+                contentContainerStyle={styles.form}
+                contentInsetAdjustmentBehavior="never"
+                automaticallyAdjustContentInsets={false}
                 showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
             >
+                {contactId && isFriendMode ? (
+                    <View style={styles.noticeCard}>
+                        <Text style={styles.noticeTitle}>Link this contact to a Buddy Balance account</Text>
+                        <Text style={styles.noticeText}>
+                            Add their friend code to keep shared records and confirmations connected across both accounts.
+                        </Text>
+                    </View>
+                ) : null}
+
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Full Name *</Text>
                     <TextInput
@@ -527,7 +559,9 @@ export default function NewContactScreen() {
                     />
                     <Text style={styles.helperText}>
                         {isFriendMode
-                            ? 'Use their code to connect both accounts so shared records stay in sync.'
+                            ? existingLinkStatus === 'accepted'
+                                ? 'This contact is already linked. Replace the code only if you need to relink them to another account.'
+                                : 'Use their code to connect both accounts so shared records stay in sync.'
                             : 'Paste a friend code if this person also uses the app.'}
                     </Text>
                 </View>
@@ -608,17 +642,30 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
-    containerIosOffset: {
-        paddingTop: 88,
-    },
     form: {
         padding: 24,
     },
-    formIosInset: {
-        paddingTop: 120,
-    },
     inputGroup: {
         marginBottom: 20,
+    },
+    noticeCard: {
+        marginBottom: 20,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#C7D2FE',
+        backgroundColor: '#EEF2FF',
+    },
+    noticeTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#312E81',
+    },
+    noticeText: {
+        marginTop: 6,
+        fontSize: 13,
+        lineHeight: 18,
+        color: '#4338CA',
     },
     helperText: {
         marginTop: 8,

@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "IOUTrack",
-    "slug": "ioutrack",
+    "name": "Buddy Balance",
+    "slug": "buddy-balance",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "ioutrack",
+    "scheme": "buddybalance",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash-icon.png",
@@ -19,12 +19,12 @@
       "supportsTablet": true,
       "buildNumber": "1",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to securely unlock your account in IOUTrack."
+        "NSFaceIDUsageDescription": "Use Face ID to securely unlock your account in Buddy Balance."
       },
-      "bundleIdentifier": "com.anonymous.igotyou"
+      "bundleIdentifier": "com.jreynoso.buddybalance"
     },
     "android": {
-      "package": "com.anonymous.igotyou",
+      "package": "com.jreynoso.buddybalance",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F8FAFC",
@@ -45,7 +45,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow IOUTrack to access your photos so you can choose a profile picture or attach an image to a record."
+          "photosPermission": "Allow Buddy Balance to access your photos so you can choose a profile picture or attach an image to a record."
         }
       ],
       [

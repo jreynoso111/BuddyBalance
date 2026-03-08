@@ -88,68 +88,6 @@ export default function RequestsScreen() {
     };
 
     const applyApprovedRequest = async (request: any) => {
-        if (request.type === 'friend_request') {
-            const senderName = String(request.request_payload?.sender_name || getDisplayName(request.from_profile)).trim() || 'Friend';
-            const senderEmail = String(request.request_payload?.sender_email || request.from_profile?.email || '').trim() || null;
-            const senderPhone = String(request.request_payload?.sender_phone || '').trim() || null;
-            const senderNotes = String(request.request_payload?.sender_notes || '').trim() || null;
-            const senderSocial = String(request.request_payload?.sender_social_network || '').trim() || null;
-
-            await supabase
-                .from('contacts')
-                .update({
-                    link_status: 'accepted',
-                    target_user_id: request.to_user_id,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('user_id', request.from_user_id)
-                .eq('target_user_id', request.to_user_id)
-                .eq('link_status', 'pending');
-
-            const { data: existingReverseContact } = await supabase
-                .from('contacts')
-                .select('id, name, email, phone, social_network, notes')
-                .eq('user_id', request.to_user_id)
-                .eq('target_user_id', request.from_user_id)
-                .is('deleted_at', null)
-                .limit(1)
-                .maybeSingle();
-
-            if (existingReverseContact?.id) {
-                const { error: reverseUpdateError } = await supabase
-                    .from('contacts')
-                    .update({
-                        target_user_id: request.from_user_id,
-                        link_status: 'accepted',
-                        name: existingReverseContact.name || senderName,
-                        email: existingReverseContact.email || senderEmail,
-                        phone: existingReverseContact.phone || senderPhone,
-                        social_network: existingReverseContact.social_network || senderSocial,
-                        notes: existingReverseContact.notes || senderNotes,
-                    })
-                    .eq('id', existingReverseContact.id);
-
-                if (reverseUpdateError) throw reverseUpdateError;
-                return;
-            }
-
-            const { error: reverseInsertError } = await supabase.from('contacts').insert([
-                {
-                    user_id: request.to_user_id,
-                    name: senderName,
-                    email: senderEmail,
-                    phone: senderPhone,
-                    notes: senderNotes,
-                    social_network: senderSocial,
-                    target_user_id: request.from_user_id,
-                    link_status: 'accepted',
-                },
-            ]);
-
-            if (reverseInsertError) throw reverseInsertError;
-            return;
-        }
-
         if (request.type === 'loan_validation') {
             const { error } = await supabase.from('loans').update({ validation_status: 'approved' }).eq('id', request.loan_id);
             if (error) throw error;
@@ -209,22 +147,6 @@ export default function RequestsScreen() {
     };
 
     const applyRejectedRequest = async (request: any) => {
-        if (request.type === 'friend_request') {
-            const { error } = await supabase
-                .from('contacts')
-                .update({
-                    target_user_id: null,
-                    link_status: 'private',
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('user_id', request.from_user_id)
-                .eq('target_user_id', request.to_user_id)
-                .eq('link_status', 'pending');
-
-            if (error) throw error;
-            return;
-        }
-
         if (request.type === 'loan_validation') {
             const { error } = await supabase.from('loans').update({ validation_status: 'rejected' }).eq('id', request.loan_id);
             if (error) throw error;
@@ -241,6 +163,21 @@ export default function RequestsScreen() {
         setLoading(true);
 
         try {
+            if (request.type === 'friend_request') {
+                const { error } = await supabase.rpc('resolve_friend_request', {
+                    p_request_id: request.id,
+                    p_action: action,
+                });
+
+                if (error) {
+                    throw error;
+                }
+
+                Alert.alert('Success', getRequestActionMessage(request.type, action));
+                await fetchRequests();
+                return;
+            }
+
             if (action === 'approved') {
                 await applyApprovedRequest(request);
             } else {
