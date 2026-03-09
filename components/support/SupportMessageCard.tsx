@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { Card, Text } from '@/components/Themed';
-import { supabase } from '@/services/supabase';
+import { submitSupportMessage as sendSupportMessage } from '@/services/support';
 import { useAuthStore } from '@/store/authStore';
 
 type SupportMessageCardProps = {
@@ -36,22 +36,19 @@ export function SupportMessageCard({
     }
 
     setSending(true);
-    const { error } = await supabase.from('support_messages').insert([
-      {
-        user_id: user.id,
-        channel: 'in_app',
+    try {
+      await sendSupportMessage({
+        userId: user.id,
         subject: subject.trim() || null,
         message: trimmedMessage,
-        status: 'open',
-      },
-    ]);
-    setSending(false);
-
-    if (error) {
-      Alert.alert('Could not send', error.message);
+      });
+    } catch (error: any) {
+      setSending(false);
+      Alert.alert('Could not send', error?.message || 'Try again in a moment.');
       return;
     }
 
+    setSending(false);
     setSubject('');
     setMessage('');
     Alert.alert('Message sent', 'Your support message was saved for admin review.');

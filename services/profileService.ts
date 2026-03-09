@@ -1,0 +1,249 @@
+import { User } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+
+import { AppLanguage, getDeviceLanguage, normalizeLanguage } from '@/constants/i18n';
+import { isMissingAvatarUrlColumn } from '@/services/profileAvatar';
+import { normalizePlanTier, PlanTier } from '@/services/subscriptionPlan';
+import { supabase } from '@/services/supabase';
+import { webApiRequest } from '@/services/webApi';
+
+const isMissingDefaultLanguageColumn = (message?: string) =>
+  String(message || '').toLowerCase().includes('default_language');
+const isMissingFriendCodeColumn = (message?: string) =>
+  String(message || '').toLowerCase().includes('friend_code');
+
+const normalizeRole = (role?: string | null) => {
+  const normalized = String(role || '').toLowerCase().trim();
+  if (normalized === 'administrator') return 'admin';
+  if (normalized) return normalized;
+  return 'user';
+};
+
+export type ProfileMeta = {
+  normalizedRole: string;
+  planTier: PlanTier;
+  language: AppLanguage;
+};
+
+export type UserProfile = {
+  fullName: string;
+  email: string;
+  phone: string;
+  currencyDefault: string;
+  defaultLanguage: AppLanguage;
+  avatarPath: string | null;
+  friendCode: string;
+  friendCodeStatus: 'ready' | 'missing';
+  planTier: PlanTier;
+  premiumReferralExpiresAt: string | null;
+};
+
+export type UpdateUserProfilePayload = {
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+  currency_default: string;
+  default_language: AppLanguage;
+  avatar_url: string | null;
+  updated_at: string;
+};
+
+export type UpdateUserProfileResult = {
+  languageSavedWithFallback: boolean;
+  avatarSavedWithFallback: boolean;
+};
+
+type WebProfileMetaResponse = {
+  role?: string | null;
+  default_language?: string | null;
+  plan_tier?: string | null;
+  premium_referral_expires_at?: string | null;
+};
+
+type WebProfileResponse = {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  currency_default?: string | null;
+  default_language?: string | null;
+  avatar_url?: string | null;
+  friend_code?: string | null;
+  plan_tier?: string | null;
+  premium_referral_expires_at?: string | null;
+};
+
+export async function fetchProfileMeta(userId: string): Promise<ProfileMeta> {
+  if (Platform.OS === 'web') {
+    const data = await webApiRequest<WebProfileMetaResponse>('/api/profile-meta');
+
+    return {
+      normalizedRole: normalizeRole(data.role),
+      planTier: normalizePlanTier(data.plan_tier, data.premium_referral_expires_at),
+      language: normalizeLanguage(data.default_language, getDeviceLanguage()),
+    };
+  }
+
+  let { data, error } = await supabase
+    .from('profiles')
+    .select('role, default_language, plan_tier, premium_referral_expires_at')
+    .eq('id', userId)
+    .single();
+
+  if (error && isMissingDefaultLanguageColumn(error.message)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('role, plan_tier, premium_referral_expires_at')
+      .eq('id', userId)
+      .single();
+    data = fallback.data as any;
+    error = fallback.error as any;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    normalizedRole: normalizeRole((data as any)?.role),
+    planTier: normalizePlanTier((data as any)?.plan_tier, (data as any)?.premium_referral_expires_at),
+    language: normalizeLanguage((data as any)?.default_language, getDeviceLanguage()),
+  };
+}
+
+export async function fetchMyProfile(user: User): Promise<UserProfile> {
+  if (Platform.OS === 'web') {
+    const data = await webApiRequest<WebProfileResponse>('/api/profile');
+
+    return {
+      fullName: String(data.full_name || user.user_metadata?.full_name || '').trim(),
+      email: data.email || user.email || '',
+      phone: data.phone || '',
+      currencyDefault: data.currency_default || 'USD',
+      defaultLanguage: normalizeLanguage(data.default_language, getDeviceLanguage()),
+      avatarPath: data.avatar_url || null,
+      friendCode: String(data.friend_code || '').trim(),
+      friendCodeStatus: String(data.friend_code || '').trim() ? 'ready' : 'missing',
+      planTier: normalizePlanTier(data.plan_tier, data.premium_referral_expires_at),
+      premiumReferralExpiresAt: data.premium_referral_expires_at || null,
+    };
+  }
+
+  const fullFields =
+    'full_name, email, phone, currency_default, default_language, avatar_url, friend_code, plan_tier, premium_referral_expires_at';
+  let { data, error } = await supabase.from('profiles').select(fullFields).eq('id', user.id).maybeSingle();
+
+  if (
+    error &&
+    (isMissingDefaultLanguageColumn(error.message) ||
+      isMissingAvatarUrlColumn(error.message) ||
+      isMissingFriendCodeColumn(error.message))
+  ) {
+    const fallbackFields = [
+      'full_name',
+      'email',
+      'phone',
+      'currency_default',
+      'plan_tier',
+      'premium_referral_expires_at',
+      ...(isMissingDefaultLanguageColumn(error.message) ? [] : ['default_language']),
+      ...(isMissingAvatarUrlColumn(error.message) ? [] : ['avatar_url']),
+      ...(isMissingFriendCodeColumn(error.message) ? [] : ['friend_code']),
+    ].join(', ');
+
+    const fallback = await supabase.from('profiles').select(fallbackFields).eq('id', user.id).maybeSingle();
+
+    data = fallback.data as any;
+    error = fallback.error as any;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    const { data: upserted, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: user.id,
+          full_name: String(user.user_metadata?.full_name || '').trim() || null,
+          email: user.email || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
+      .select(fullFields)
+      .maybeSingle();
+
+    if (upsertError) {
+      throw new Error(upsertError.message);
+    }
+
+    data = upserted as any;
+  }
+
+  let resolvedFriendCode = String((data as any)?.friend_code || '').trim();
+  if (!resolvedFriendCode) {
+    const { data: ensuredCode, error: ensureError } = await supabase.rpc('ensure_my_friend_code');
+    if (ensureError) {
+      console.error('friend code ensure failed:', ensureError.message);
+    } else {
+      resolvedFriendCode = String(ensuredCode || '').trim();
+    }
+  }
+
+  return {
+    fullName: data?.full_name || String(user.user_metadata?.full_name || '').trim() || '',
+    email: data?.email || user.email || '',
+    phone: data?.phone || '',
+    currencyDefault: data?.currency_default || 'USD',
+    defaultLanguage: normalizeLanguage((data as any)?.default_language, getDeviceLanguage()),
+    avatarPath: (data as any)?.avatar_url || null,
+    friendCode: resolvedFriendCode,
+    friendCodeStatus: resolvedFriendCode ? 'ready' : 'missing',
+    planTier: normalizePlanTier((data as any)?.plan_tier, (data as any)?.premium_referral_expires_at),
+    premiumReferralExpiresAt: (data as any)?.premium_referral_expires_at || null,
+  };
+}
+
+export async function updateMyProfile(
+  userId: string,
+  patch: UpdateUserProfilePayload
+): Promise<UpdateUserProfileResult> {
+  if (Platform.OS === 'web') {
+    return webApiRequest<UpdateUserProfileResult>('/api/profile', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  let languageSavedWithFallback = false;
+  let avatarSavedWithFallback = false;
+
+  let { error } = await supabase.from('profiles').update(patch).eq('id', userId);
+
+  if (error && (isMissingDefaultLanguageColumn(error.message) || isMissingAvatarUrlColumn(error.message))) {
+    languageSavedWithFallback = isMissingDefaultLanguageColumn(error.message);
+    avatarSavedWithFallback = isMissingAvatarUrlColumn(error.message);
+
+    const fallbackPatch = { ...patch };
+    if (languageSavedWithFallback) {
+      delete (fallbackPatch as Partial<UpdateUserProfilePayload>).default_language;
+    }
+    if (avatarSavedWithFallback) {
+      delete (fallbackPatch as Partial<UpdateUserProfilePayload>).avatar_url;
+    }
+
+    const fallback = await supabase.from('profiles').update(fallbackPatch).eq('id', userId);
+    error = fallback.error as any;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return {
+    languageSavedWithFallback,
+    avatarSavedWithFallback,
+  };
+}

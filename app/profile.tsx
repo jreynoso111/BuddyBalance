@@ -4,25 +4,18 @@ import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Card, Text, View } from '@/components/Themed';
 import { useAuthStore } from '@/store/authStore';
-import { supabase } from '@/services/supabase';
 import { CURRENCIES } from '@/constants/Currencies';
 import { AppLanguage, getDeviceLanguage, normalizeLanguage, SUPPORTED_LANGUAGES } from '@/constants/i18n';
 import { useI18n } from '@/hooks/useI18n';
 import { ArrowLeft, Camera, House, Trash2 } from 'lucide-react-native';
 import {
   getProfileAvatarPublicUrl,
-  isMissingAvatarUrlColumn,
   removeProfileAvatar,
   uploadProfileAvatar,
 } from '@/services/profileAvatar';
+import { fetchMyProfile, updateMyProfile, UpdateUserProfilePayload } from '@/services/profileService';
 import { applyInvitationCode, formatReferralExpiry, getMyInviteSummary, InviteSummary } from '@/services/referrals';
-import { normalizePlanTier } from '@/services/subscriptionPlan';
 import { WebAccountLayout } from '@/components/website/WebAccountLayout';
-
-const isMissingDefaultLanguageColumn = (message?: string) =>
-  String(message || '').toLowerCase().includes('default_language');
-const isMissingFriendCodeColumn = (message?: string) =>
-  String(message || '').toLowerCase().includes('friend_code');
 
 export default function ProfileScreen() {
   const { user, planTier, initialized, setLanguage, setPlanTier } = useAuthStore();
@@ -49,113 +42,41 @@ export default function ProfileScreen() {
   const avatarMimeTypeRef = useRef<string | null>(null);
 
   const loadProfile = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user) return;
     setInitializing(true);
     setFriendCodeStatus('loading');
     setFullName((current) => current || String(user.user_metadata?.full_name || '').trim());
     setEmail((current) => current || user.email || '');
+    try {
+      const data = await fetchMyProfile(user);
 
-    const fullFields = 'full_name, email, phone, currency_default, default_language, avatar_url, friend_code, plan_tier, premium_referral_expires_at';
-    let { data, error } = await supabase
-      .from('profiles')
-      .select(fullFields)
-      .eq('id', user.id)
-      .maybeSingle();
+      setFullName(data.fullName);
+      setEmail(data.email);
+      setPhone(data.phone);
+      setCurrencyDefault(data.currencyDefault);
+      setDefaultLanguage(data.defaultLanguage);
+      setFriendCode(data.friendCode);
+      setFriendCodeStatus(data.friendCodeStatus);
+      setPlanTier(data.planTier);
+      setAvatarPath(data.avatarPath);
+      setAvatarPreviewUrl(getProfileAvatarPublicUrl(data.avatarPath));
 
-    if (error && (isMissingDefaultLanguageColumn(error.message) || isMissingAvatarUrlColumn(error.message) || isMissingFriendCodeColumn(error.message))) {
-      const fallbackFields = [
-        'full_name',
-        'email',
-        'phone',
-        'currency_default',
-        'plan_tier',
-        'premium_referral_expires_at',
-        ...(isMissingDefaultLanguageColumn(error.message) ? [] : ['default_language']),
-        ...(isMissingAvatarUrlColumn(error.message) ? [] : ['avatar_url']),
-        ...(isMissingFriendCodeColumn(error.message) ? [] : ['friend_code']),
-      ].join(', ');
+      const inviteSummaryResult = await getMyInviteSummary();
+      if (inviteSummaryResult.data) {
+        setInviteSummary(inviteSummaryResult.data);
+        setInviteCodeInput((current) => current || inviteSummaryResult.data?.referredByCode || '');
+      }
 
-      const fallback = await supabase
-        .from('profiles')
-        .select(fallbackFields)
-        .eq('id', user.id)
-        .maybeSingle();
-
-      data = fallback.data as any;
-      error = fallback.error as any;
-    }
-
-    if (error) {
-      console.error('profile load failed:', error.message);
-      Alert.alert('Error', error.message);
+      avatarBase64Ref.current = null;
+      avatarMimeTypeRef.current = null;
+      setAvatarMarkedForRemoval(false);
+      setAvatarDirty(false);
+    } catch (error: any) {
+      console.error('profile load failed:', error?.message || error);
+      Alert.alert('Error', error?.message || 'Could not load your profile.');
+    } finally {
       setInitializing(false);
-      return;
     }
-
-    if (!data) {
-      const { data: upserted, error: upsertError } = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            id: user.id,
-            full_name: String(user.user_metadata?.full_name || '').trim() || null,
-            email: user.email || null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        )
-        .select(fullFields)
-        .maybeSingle();
-
-      if (upsertError) {
-        console.error('profile bootstrap failed:', upsertError.message);
-      } else {
-        data = upserted as any;
-      }
-    }
-
-    let resolvedFriendCode = String((data as any)?.friend_code || '').trim();
-    if (!resolvedFriendCode) {
-      const { data: ensuredCode, error: ensureError } = await supabase.rpc('ensure_my_friend_code');
-      if (ensureError) {
-        console.error('friend code ensure failed:', ensureError.message);
-      } else {
-        resolvedFriendCode = String(ensuredCode || '').trim();
-      }
-    }
-
-    if (data) {
-      const nextAvatarPath = (data as any).avatar_url || null;
-      setFullName(data.full_name || String(user.user_metadata?.full_name || '').trim() || '');
-      setEmail(data.email || user.email || '');
-      setPhone(data.phone || '');
-      setCurrencyDefault(data.currency_default || 'USD');
-      setDefaultLanguage(normalizeLanguage((data as any).default_language, getDeviceLanguage()));
-      setFriendCode(resolvedFriendCode);
-      setFriendCodeStatus(resolvedFriendCode ? 'ready' : 'missing');
-      setPlanTier(normalizePlanTier((data as any)?.plan_tier, (data as any)?.premium_referral_expires_at));
-      setAvatarPath(nextAvatarPath);
-      setAvatarPreviewUrl(getProfileAvatarPublicUrl(nextAvatarPath));
-    } else {
-      setFullName(String(user.user_metadata?.full_name || '').trim());
-      setEmail(user.email || '');
-      setFriendCode(resolvedFriendCode);
-      setFriendCodeStatus(resolvedFriendCode ? 'ready' : 'missing');
-      setAvatarPath(null);
-      setAvatarPreviewUrl(null);
-    }
-
-    const inviteSummaryResult = await getMyInviteSummary();
-    if (inviteSummaryResult.data) {
-      setInviteSummary(inviteSummaryResult.data);
-      setInviteCodeInput((current) => current || inviteSummaryResult.data?.referredByCode || '');
-    }
-
-    avatarBase64Ref.current = null;
-    avatarMimeTypeRef.current = null;
-    setAvatarMarkedForRemoval(false);
-    setAvatarDirty(false);
-    setInitializing(false);
   }, [setPlanTier, user?.email, user?.id, user?.user_metadata?.full_name]);
 
   useFocusEffect(
@@ -227,7 +148,7 @@ export default function ProfileScreen() {
         nextAvatarPath = uploadedAvatarPath;
       }
 
-      const patch: Record<string, any> = {
+      const patch: UpdateUserProfilePayload = {
         full_name: fullName.trim() || null,
         phone: phone.trim() || null,
         email: email.trim() || user.email || null,
@@ -237,27 +158,9 @@ export default function ProfileScreen() {
         updated_at: new Date().toISOString(),
       };
 
-      let { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
-
-      if (error && (isMissingDefaultLanguageColumn(error.message) || isMissingAvatarUrlColumn(error.message))) {
-        languageSavedWithFallback = isMissingDefaultLanguageColumn(error.message);
-        avatarSavedWithFallback = isMissingAvatarUrlColumn(error.message);
-
-        const fallbackPatch = { ...patch };
-        if (languageSavedWithFallback) {
-          delete fallbackPatch.default_language;
-        }
-        if (avatarSavedWithFallback) {
-          delete fallbackPatch.avatar_url;
-        }
-
-        const fallback = await supabase.from('profiles').update(fallbackPatch).eq('id', user.id);
-        error = fallback.error as any;
-      }
-
-      if (error) {
-        throw error;
-      }
+      const updateResult = await updateMyProfile(user.id, patch);
+      languageSavedWithFallback = updateResult.languageSavedWithFallback;
+      avatarSavedWithFallback = updateResult.avatarSavedWithFallback;
 
       if (uploadedAvatarPath && avatarSavedWithFallback) {
         await removeProfileAvatar(uploadedAvatarPath);

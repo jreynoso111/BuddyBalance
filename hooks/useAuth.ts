@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceLanguage, normalizeLanguage } from '@/constants/i18n';
 import { normalizePlanTier } from '@/services/subscriptionPlan';
 import { showSharedUpdateNotification } from '@/services/notificationService';
+import { fetchProfileMeta } from '@/services/profileService';
 import { getMyInviteSummary, getMyPendingPremiumCelebration } from '@/services/referrals';
 
 const LAST_PROTECTED_PATH_KEY = 'last_protected_path';
@@ -66,30 +67,6 @@ export const useAuth = () => {
         if (!value) return false;
         const normalized = value.toLowerCase();
         return PUBLIC_PATH_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(prefix));
-    };
-
-    const fetchProfileMeta = async (userId: string) => {
-        let { data, error } = await supabase
-            .from('profiles')
-            .select('role, default_language, plan_tier, premium_referral_expires_at')
-            .eq('id', userId)
-            .single();
-
-        if (error && isMissingDefaultLanguageColumn(error.message)) {
-            const fallback = await supabase
-                .from('profiles')
-                .select('role, plan_tier, premium_referral_expires_at')
-                .eq('id', userId)
-                .single();
-            data = fallback.data as any;
-            error = fallback.error as any;
-        }
-
-        const normalizedRole = normalizeRole((data as any)?.role);
-        const planTier = normalizePlanTier((data as any)?.plan_tier, (data as any)?.premium_referral_expires_at);
-        const language = normalizeLanguage((data as any)?.default_language, getDeviceLanguage());
-
-        return { normalizedRole, planTier, language };
     };
 
     const hydratePendingReferralReward = async () => {

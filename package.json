@@ -1,22 +1,13 @@
 {
-  "name": "buddy-balance",
+  "name": "body-balance-web",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "start:dev-client": "expo start --dev-client",
-    "android": "expo run:android",
-    "android:release": "expo run:android --variant release",
-    "ios": "expo run:ios",
-    "ios:release": "expo run:ios --configuration Release",
-    "ios:release:sim": "bash ./scripts/run-ios-release-sim.sh",
-    "ios:device": "expo run:ios --device",
+    "start": "expo start --web",
     "web": "expo start --web",
     "build:web": "expo export --platform web && node scripts/prepare-web-dist.js",
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor",
-    "export:prod": "expo export --platform ios --platform android",
-    "preflight:release": "npm run typecheck && npm run doctor && npm run export:prod",
     "deploy:admin-user-management": "supabase functions deploy admin-user-management --no-verify-jwt"
   },
   "dependencies": {

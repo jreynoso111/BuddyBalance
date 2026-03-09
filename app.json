@@ -1,43 +1,19 @@
 {
   "expo": {
-    "name": "Buddy Balance",
-    "slug": "buddy-balance",
+    "name": "Body Balance Web",
+    "slug": "buddy-balance-web",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "buddybalance",
+    "scheme": "buddybalance-web",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "buildNumber": "1",
-      "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to securely unlock your account in Buddy Balance."
-      },
-      "bundleIdentifier": "com.jreynoso.buddybalance"
-    },
-    "android": {
-      "package": "com.jreynoso.buddybalance",
-      "versionCode": 1,
-      "blockedPermissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ],
-      "adaptiveIcon": {
-        "backgroundColor": "#F8FAFC",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
     },
     "web": {
       "bundler": "metro",
