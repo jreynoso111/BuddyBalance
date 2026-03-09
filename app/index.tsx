@@ -252,7 +252,7 @@ export default function LandingPage() {
                                 Track cash loans, item returns, partial payments, and direction of ownership in one shared ledger.
                             </Text>
                         </View>
-                    </PublicCard>
+                    </View>
 
                     <LinearGradient colors={['#111A3B', '#212B60']} style={styles.webStatementPanel}>
                         <Text style={styles.webStatementLabel}>WHY IT FEELS DIFFERENT</Text>

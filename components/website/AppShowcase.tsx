@@ -185,11 +185,15 @@ function HomeScreen() {
         <View style={styles.balanceSplit}>
           <View style={styles.balanceStatCard}>
             <Text style={styles.balanceStatLabel}>THEY OWE YOU</Text>
-            <Text style={styles.balanceStatValue}>$3,650</Text>
+            <Text style={styles.balanceStatValue} numberOfLines={1} adjustsFontSizeToFit>
+              $3,650
+            </Text>
           </View>
           <View style={styles.balanceStatCard}>
             <Text style={styles.balanceStatLabel}>YOU OWE</Text>
-            <Text style={styles.balanceStatValue}>$0</Text>
+            <Text style={styles.balanceStatValue} numberOfLines={1} adjustsFontSizeToFit>
+              $0
+            </Text>
           </View>
         </View>
       </LinearGradient>
@@ -557,9 +561,11 @@ const styles = StyleSheet.create({
   },
   balanceStatCard: {
     flex: 1,
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.48)',
+    minWidth: 0,
   },
   balanceStatLabel: {
     color: '#476257',
@@ -569,7 +575,8 @@ const styles = StyleSheet.create({
   balanceStatValue: {
     marginTop: 6,
     color: '#0F172A',
-    fontSize: 18,
+    fontSize: 16,
+    lineHeight: 18,
     fontWeight: '900',
   },
   queueRow: {
