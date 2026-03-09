@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { AppLegalFooter } from '@/components/AppLegalFooter';
 import { BrandLogo } from '@/components/BrandLogo';
 import { Text } from '@/components/Themed';
+import { useAuthStore } from '@/store/authStore';
 
 type PublicAction = {
   href: Href;
@@ -41,6 +42,7 @@ export function PublicSiteLayout({
   children,
 }: PublicSiteLayoutProps) {
   const pathname = usePathname() || '/';
+  const user = useAuthStore((state) => state.user);
 
   return (
     <ScrollView
@@ -67,6 +69,13 @@ export function PublicSiteLayout({
                 </Link>
               );
             })}
+            <Link href={user ? '/settings' : '/(auth)/login'} asChild>
+              <Pressable style={[styles.accountLink, user && styles.accountLinkActive]}>
+                <Text style={[styles.accountLabel, user && styles.accountLabelActive]}>
+                  {user ? 'Account' : 'Sign in'}
+                </Text>
+              </Pressable>
+            </Link>
           </View>
         </View>
 
@@ -182,6 +191,27 @@ const styles = StyleSheet.create({
     color: '#334155',
   },
   navLabelActive: {
+    color: '#FFFFFF',
+  },
+  accountLink: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#0F172A',
+  },
+  accountLinkActive: {
+    backgroundColor: '#5B63FF',
+    borderColor: '#5B63FF',
+  },
+  accountLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  accountLabelActive: {
     color: '#FFFFFF',
   },
   hero: {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View as RNView } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Link, Stack, useRouter } from 'expo-router';
 import { Screen, Card, Text } from '@/components/Themed';
 import {
   Bell,
@@ -13,6 +13,7 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import { supabase } from '@/services/supabase';
 import { AppLegalFooter } from '@/components/AppLegalFooter';
+import { PublicContactForm } from '@/components/support/PublicContactForm';
 import { PublicCard, PublicSiteLayout } from '@/components/website/PublicSiteLayout';
 
 type QuickGuideItem = {
@@ -100,29 +101,49 @@ export default function HelpSupportScreen() {
     return (
       <PublicSiteLayout
         eyebrow="Support"
-        title="Help for Buddy Balance users and launch visitors."
-        description="Use this page to understand the product, review the current policies, and learn how account-specific support works while the public domain and mail channels are being finalized."
+        title="Support is the main home for product help, account questions, and public contact."
+        description="Use this hub to reach Buddy Balance support, understand the current product behavior, and open the related policy and FAQ pages that support store submission and customer trust."
         actions={[
           { href: '/faq', label: 'Browse FAQ' },
-          { href: '/terms', label: 'Read Terms', variant: 'secondary' },
+          { href: '/privacy', label: 'Review Privacy', variant: 'secondary' },
         ]}
       >
-        <PublicCard
-          title="Account-specific support"
-          description={
-            user?.id
-              ? 'You are signed in, so you can send an in-app message below and it will be stored for administrator follow-up.'
-              : 'For account-specific issues, the current support workflow lives inside the authenticated app experience. Sign in to submit a tracked support message tied to your account.'
-          }
-        />
-        <PublicCard
-          title="What this site already covers"
-          description="The public website is the home for FAQ, privacy policy, terms of service, and launch information while Buddy Balance prepares for wider mobile release."
-        />
-        <PublicCard
-          title="Public email channel"
-          description="A domain-based support inbox will be added once the new mail setup is configured. Until then, authenticated users should use the in-app support flow so the request is attached to the correct account history."
-        />
+        <RNView style={styles.webGuideGrid}>
+          <PublicCard
+            title="Support sections"
+            description="Treat this page as the main support hub. The other pages are supporting references, not separate microsites."
+          >
+            <RNView style={styles.webLinkStack}>
+              <Link href="/faq" style={styles.webGuideLink}>
+                <Text style={styles.webGuideLinkLabel}>FAQ</Text>
+                <Text style={styles.webGuideLinkBody}>Current answers for records, contacts, notifications, Premium, and account recovery.</Text>
+              </Link>
+              <Link href="/privacy" style={styles.webGuideLink}>
+                <Text style={styles.webGuideLinkLabel}>Privacy Policy</Text>
+                <Text style={styles.webGuideLinkBody}>How account data, record history, support messages, and usage signals are handled.</Text>
+              </Link>
+              <Link href="/terms" style={styles.webGuideLink}>
+                <Text style={styles.webGuideLinkLabel}>Terms of Service</Text>
+                <Text style={styles.webGuideLinkBody}>Usage rules, account expectations, and the current product scope.</Text>
+              </Link>
+            </RNView>
+          </PublicCard>
+
+          <PublicCard
+            title="Account-specific support"
+            description={
+              user?.id
+                ? 'You are signed in, so you can send an in-app message below and it will be stored for administrator follow-up.'
+                : 'For account-specific issues, the authenticated support flow still matters. Sign in when the problem depends on your own account, contacts, or shared records.'
+            }
+          >
+            <Text style={styles.webSupportNote}>
+              Public contact is best for launch questions, partnerships, and general product feedback. Signed-in support is best for account, record, and history issues.
+            </Text>
+          </PublicCard>
+        </RNView>
+
+        <PublicContactForm />
 
         {user?.id ? (
           <Card style={styles.contactCard}>
@@ -264,6 +285,40 @@ const styles = StyleSheet.create({
   contactCard: {
     marginTop: 16,
     padding: 18,
+  },
+  webGuideGrid: {
+    gap: 16,
+    backgroundColor: 'transparent',
+  },
+  webLinkStack: {
+    gap: 12,
+    marginTop: 18,
+    backgroundColor: 'transparent',
+  },
+  webGuideLink: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D6DAFF',
+    backgroundColor: '#F8FAFF',
+    padding: 16,
+  },
+  webGuideLinkLabel: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  webGuideLinkBody: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#475569',
+  },
+  webSupportNote: {
+    marginTop: 18,
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#475569',
   },
   contactTitle: {
     fontSize: 18,
