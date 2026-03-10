@@ -373,7 +373,7 @@ function ScreenHeader({ title, pill }: { title: string; pill?: string }) {
 function HomeScreen() {
   return (
     <View style={styles.screenBody}>
-      <ScreenHeader title="Home" pill="ORGANIZED" />
+      <ScreenHeader title="Home" pill="PREMIUM" />
       <Text style={styles.heroName}>Hi, Joe!</Text>
       <Text style={styles.heroSubline}>Focus on what needs attention first.</Text>
 
@@ -384,31 +384,31 @@ function HomeScreen() {
 
       <LinearGradient colors={['#CCFCE0', '#C5F0D6']} style={styles.balancePanel}>
         <View style={styles.balanceTag}>
-          <Text style={styles.balanceTagText}>ALL CAUGHT UP</Text>
+          <Text style={styles.balanceTagText}>YOU LENT MORE</Text>
         </View>
-        <Text style={styles.balanceLabel}>SHARED OVERVIEW</Text>
-        <Text style={styles.balanceValue}>12 updates</Text>
-        <Text style={styles.balanceCopy}>Recent changes and reminders stay organized in one place.</Text>
+        <Text style={styles.balanceLabel}>OPEN BALANCE</Text>
+        <Text style={styles.balanceValue}>+$3,650</Text>
+        <Text style={styles.balanceCopy}>Friends owe you more than you owe them.</Text>
 
         <View style={styles.balanceSplit}>
           <View style={styles.balanceStatCard}>
-            <Text style={styles.balanceStatLabel}>CONTACTS</Text>
+            <Text style={styles.balanceStatLabel}>THEY OWE YOU</Text>
             <Text style={styles.balanceStatValue} numberOfLines={1} adjustsFontSizeToFit>
-              8
+              $3,650
             </Text>
           </View>
           <View style={styles.balanceStatCard}>
-            <Text style={styles.balanceStatLabel}>REMINDERS</Text>
+            <Text style={styles.balanceStatLabel}>YOU OWE</Text>
             <Text style={styles.balanceStatValue} numberOfLines={1} adjustsFontSizeToFit>
-              3
+              $0
             </Text>
           </View>
         </View>
       </LinearGradient>
 
       <View style={styles.queueRow}>
-        <QueueMiniCard label="Needs attention" value="2" />
-        <QueueMiniCard label="This week" value="4" />
+        <QueueMiniCard label="Needs attention" value="0" />
+        <QueueMiniCard label="Next 7 days" value="0" />
         <QueueMiniCard label="Shared records" value="11" highlight />
       </View>
 
