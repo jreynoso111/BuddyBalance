@@ -75,9 +75,9 @@ export function PublicSiteLayout({
   return (
     <ScrollView
       style={styles.page}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, mobile && styles.contentMobile]}
       showsVerticalScrollIndicator={false}
-      stickyHeaderIndices={[1]}
+      stickyHeaderIndices={mobile ? undefined : [1]}
     >
       <View style={styles.backgroundLayer}>
         <LinearGradient colors={['#EEF2FF', '#F7F1FF', '#FFF5E9']} style={styles.gradientWash} />
@@ -137,6 +137,7 @@ export function PublicSiteLayout({
                 <Pressable
                   style={StyleSheet.flatten([
                     styles.accountLink,
+                    mobile && styles.accountLinkMobile,
                     user && styles.accountLinkActive,
                   ])}
                 >
@@ -251,10 +252,13 @@ export function PublicCard({
   description?: string;
   children?: React.ReactNode;
 }) {
+  const { width } = useWindowDimensions();
+  const mobile = width < 640;
+
   return (
-    <LinearGradient colors={['rgba(255,255,255,0.94)', 'rgba(255,255,255,0.7)']} style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      {description ? <Text style={styles.cardDescription}>{description}</Text> : null}
+    <LinearGradient colors={['rgba(255,255,255,0.94)', 'rgba(255,255,255,0.7)']} style={[styles.card, mobile && styles.cardMobile]}>
+      <Text style={[styles.cardTitle, mobile && styles.cardTitleMobile]}>{title}</Text>
+      {description ? <Text style={[styles.cardDescription, mobile && styles.cardDescriptionMobile]}>{description}</Text> : null}
       {children}
     </LinearGradient>
   );
@@ -267,6 +271,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 0,
+  },
+  contentMobile: {
+    paddingBottom: 8,
   },
   headerStickyWrap: {
     zIndex: 30,
@@ -378,6 +385,7 @@ const styles = StyleSheet.create({
   },
   navMobile: {
     gap: 8,
+    width: '100%',
   },
   navLink: {
     minHeight: 42,
@@ -394,6 +402,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: 11,
     paddingVertical: 8,
+    flexGrow: 1,
   },
   navLinkActive: {
     backgroundColor: '#101A3A',
@@ -418,6 +427,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     borderWidth: 1,
     borderColor: '#0F172A',
+  },
+  accountLinkMobile: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   accountLinkActive: {
     backgroundColor: '#5B63FF',
@@ -590,17 +604,29 @@ const styles = StyleSheet.create({
     shadowRadius: 26,
     elevation: 10,
   },
+  cardMobile: {
+    padding: 18,
+    borderRadius: 22,
+  },
   cardTitle: {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '900',
     color: '#0F172A',
   },
+  cardTitleMobile: {
+    fontSize: 20,
+    lineHeight: 26,
+  },
   cardDescription: {
     marginTop: 12,
     fontSize: 15,
     lineHeight: 24,
     color: '#475569',
+  },
+  cardDescriptionMobile: {
+    fontSize: 14,
+    lineHeight: 22,
   },
   footerShell: {
     marginTop: 8,

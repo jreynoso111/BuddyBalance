@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View as RNView } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View as RNView, useWindowDimensions } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Check, Shield, Smartphone } from 'lucide-react-native';
 
@@ -35,6 +35,7 @@ function getMembershipSourceLabel(source?: MembershipDetails['grantedSource']) {
 }
 
 export default function SubscriptionScreen() {
+  const { width } = useWindowDimensions();
   const planTier = useAuthStore((state) => state.planTier);
   const user = useAuthStore((state) => state.user);
   const initialized = useAuthStore((state) => state.initialized);
@@ -45,6 +46,7 @@ export default function SubscriptionScreen() {
   const [sendingInvite, setSendingInvite] = React.useState(false);
   const [referralSummary, setReferralSummary] = React.useState<InviteSummary | null>(null);
   const [membershipDetails, setMembershipDetails] = React.useState<MembershipDetails | null>(null);
+  const compactWeb = Platform.OS === 'web' && width < 760;
 
   React.useEffect(() => {
     if (!user?.id) return;
@@ -155,10 +157,10 @@ export default function SubscriptionScreen() {
           title={planTier === 'premium' ? 'Premium is active on this account.' : 'Upgrade this account to Premium from Membership.'}
           description="Membership is where web shows the live plan, the upgrade action, referrals, and any admin-granted Premium state for this account."
         >
-          <RNView style={styles.webGrid}>
-            <Card style={styles.webPanel}>
+          <RNView style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+            <Card style={[styles.webPanel, compactWeb && styles.webPanelCompact]}>
               <Text style={styles.webPanelTitle}>{planTier === 'premium' ? 'Membership details' : 'Upgrade plan'}</Text>
-              <Text style={styles.webPlanValue}>{planTitle}</Text>
+              <Text style={[styles.webPlanValue, compactWeb && styles.webPlanValueCompact]}>{planTitle}</Text>
               <Text style={styles.webBody}>
                 {planTier === 'premium'
                   ? 'Premium is already active on this account. This section now shows how the membership was granted and whether it has an expiration date.'
@@ -166,17 +168,19 @@ export default function SubscriptionScreen() {
               </Text>
               {planTier === 'premium' ? (
                 <RNView style={styles.membershipDetailStack}>
-                  <RNView style={styles.membershipDetailRow}>
+                  <RNView style={[styles.membershipDetailRow, compactWeb && styles.membershipDetailRowCompact]}>
                     <Text style={styles.membershipDetailLabel}>Started</Text>
-                    <Text style={styles.membershipDetailValue}>{membershipStartedLabel}</Text>
+                    <Text style={[styles.membershipDetailValue, compactWeb && styles.membershipDetailValueCompact]}>{membershipStartedLabel}</Text>
                   </RNView>
-                  <RNView style={styles.membershipDetailRow}>
+                  <RNView style={[styles.membershipDetailRow, compactWeb && styles.membershipDetailRowCompact]}>
                     <Text style={styles.membershipDetailLabel}>Source</Text>
-                    <Text style={styles.membershipDetailValue}>{membershipSourceLabel}</Text>
+                    <Text style={[styles.membershipDetailValue, compactWeb && styles.membershipDetailValueCompact]}>{membershipSourceLabel}</Text>
                   </RNView>
-                  <RNView style={styles.membershipDetailRow}>
+                  <RNView style={[styles.membershipDetailRow, compactWeb && styles.membershipDetailRowCompact]}>
                     <Text style={styles.membershipDetailLabel}>Active until</Text>
-                    <Text style={styles.membershipDetailValue}>{membershipExpiryLabel || 'No expiration recorded'}</Text>
+                    <Text style={[styles.membershipDetailValue, compactWeb && styles.membershipDetailValueCompact]}>
+                      {membershipExpiryLabel || 'No expiration recorded'}
+                    </Text>
                   </RNView>
                   <Text style={styles.webMembershipNote}>{membershipSourceDetail}</Text>
                 </RNView>
@@ -197,7 +201,7 @@ export default function SubscriptionScreen() {
               )}
             </Card>
 
-          <Card style={styles.webPanel}>
+          <Card style={[styles.webPanel, compactWeb && styles.webPanelCompact]}>
             <Text style={styles.webPanelTitle}>What Premium unlocks</Text>
             {[
               `Unlimited linked friends instead of ${PLAN_LIMITS.free.linkedFriends}`,
@@ -214,8 +218,8 @@ export default function SubscriptionScreen() {
         </RNView>
 
         {referralSummary ? (
-          <RNView style={styles.webGrid}>
-            <Card style={styles.webPanel}>
+          <RNView style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+            <Card style={[styles.webPanel, compactWeb && styles.webPanelCompact]}>
               <Text style={styles.webPanelTitle}>Referral status</Text>
               <Text style={styles.webBody}>
                 {referralSummary.premiumReferralExpiresAt
@@ -226,7 +230,7 @@ export default function SubscriptionScreen() {
             </Card>
 
             {planTier !== 'premium' ? (
-              <Card style={styles.webPanel}>
+              <Card style={[styles.webPanel, compactWeb && styles.webPanelCompact]}>
                 <Text style={styles.webPanelTitle}>Send an invite</Text>
                 <TextInput
                   value={inviteEmail}
@@ -552,10 +556,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 16,
   },
+  webGridCompact: {
+    flexDirection: 'column',
+  },
   webPanel: {
     flex: 1,
     minWidth: 320,
     padding: 22,
+  },
+  webPanelCompact: {
+    width: '100%',
+    minWidth: 0,
   },
   webPanelTitle: {
     fontSize: 20,
@@ -570,6 +581,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#4338CA',
     marginBottom: 12,
+  },
+  webPlanValueCompact: {
+    fontSize: 28,
+    lineHeight: 34,
   },
   webBody: {
     fontSize: 15,
@@ -597,6 +612,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
     backgroundColor: 'transparent',
   },
+  membershipDetailRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   membershipDetailLabel: {
     fontSize: 13,
     fontWeight: '800',
@@ -611,6 +630,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     textAlign: 'right',
+  },
+  membershipDetailValueCompact: {
+    textAlign: 'left',
   },
   webBenefitRow: {
     flexDirection: 'row',

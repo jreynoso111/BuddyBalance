@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image, RefreshControl, Platform } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image, RefreshControl, Platform, useWindowDimensions } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { clearPersistedAuthState, supabase } from '@/services/supabase';
@@ -21,6 +21,7 @@ const isMissingDefaultLanguageColumn = (message?: string) =>
     String(message || '').toLowerCase().includes('default_language');
 
 export default function SettingsScreen() {
+    const { width } = useWindowDimensions();
     const { user, role, planTier, initialized, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
     const router = useRouter();
     const [prefs, setPrefs] = React.useState(DEFAULT_USER_PREFERENCES);
@@ -40,6 +41,7 @@ export default function SettingsScreen() {
     });
     const normalizedRole = (role || '').toLowerCase().trim();
     const hasAdminAccess = normalizedRole === 'admin' || normalizedRole === 'administrator';
+    const compactWeb = Platform.OS === 'web' && width < 760;
 
     useFocusEffect(
         React.useCallback(() => {
@@ -246,9 +248,9 @@ export default function SettingsScreen() {
                 title="Manage the same Buddy Balance account you use in the app."
                 description="This web area is the desktop version of your app account: profile, membership, notifications, exports, and security."
             >
-                <View style={styles.webGrid}>
-                    <Card style={styles.webSummaryCard}>
-                        <RNView style={styles.webSummaryTop}>
+                <View style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+                    <Card style={[styles.webSummaryCard, compactWeb && styles.webCardCompact]}>
+                        <RNView style={[styles.webSummaryTop, compactWeb && styles.webSummaryTopCompact]}>
                             <RNView style={styles.avatarLarge}>
                                 {avatarUrl ? (
                                     <Image
@@ -272,15 +274,15 @@ export default function SettingsScreen() {
                     </Card>
                 </View>
 
-                <View style={styles.webGrid}>
-                    <Card style={styles.webStatusCard}>
+                <View style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+                    <Card style={[styles.webStatusCard, compactWeb && styles.webCardCompact]}>
                         <Text style={styles.webCardTitle}>Current status</Text>
                         <Text style={styles.webStatusLine}>Push alerts: {prefs.push_enabled ? 'Enabled' : 'Disabled'}</Text>
                         <Text style={styles.webStatusLine}>Biometric lock: {prefs.biometric_enabled ? 'Enabled' : 'Disabled'}</Text>
                         <Text style={styles.webStatusLine}>Marketing updates: {prefs.marketing_enabled ? 'Enabled' : 'Disabled'}</Text>
                     </Card>
 
-                    <Card style={styles.webStatusCard}>
+                    <Card style={[styles.webStatusCard, compactWeb && styles.webCardCompact]}>
                         <Text style={styles.webCardTitle}>Quick actions</Text>
                         {planTier === 'premium' ? (
                             <TouchableOpacity style={styles.webPrimaryButton} onPress={handleExport}>
@@ -297,8 +299,8 @@ export default function SettingsScreen() {
                     </Card>
                 </View>
 
-                <View style={styles.webGrid}>
-                    <Card style={styles.webPreferenceCard}>
+                <View style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+                    <Card style={[styles.webPreferenceCard, compactWeb && styles.webCardCompact]}>
                         <Text style={styles.webCardTitle}>Preferences</Text>
                         <Text style={styles.webPreferenceText}>
                             Change the default currency and language for this account without replacing the other account actions.
@@ -539,6 +541,13 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: 16,
     },
+    webGridCompact: {
+        flexDirection: 'column',
+    },
+    webCardCompact: {
+        width: '100%',
+        minWidth: 0,
+    },
     webSummaryCard: {
         flex: 1,
         minWidth: 320,
@@ -553,6 +562,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 16,
         marginBottom: 16,
+    },
+    webSummaryTopCompact: {
+        flexDirection: 'column',
+        alignItems: 'flex-start',
     },
     webSummaryCopy: {
         flex: 1,

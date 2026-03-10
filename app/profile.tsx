@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, Share, StyleSheet, TextInput, TouchableOpacity, View as RNView, RefreshControl, Platform } from 'react-native';
+import { Alert, Image, ScrollView, Share, StyleSheet, TextInput, TouchableOpacity, View as RNView, RefreshControl, Platform, useWindowDimensions } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen, Card, Text, View } from '@/components/Themed';
@@ -18,6 +18,7 @@ import { applyInvitationCode, formatReferralExpiry, getMyInviteSummary, InviteSu
 import { WebAccountLayout } from '@/components/website/WebAccountLayout';
 
 export default function ProfileScreen() {
+  const { width } = useWindowDimensions();
   const { user, planTier, initialized, setLanguage, setPlanTier } = useAuthStore();
   const { t } = useI18n();
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function ProfileScreen() {
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarMarkedForRemoval, setAvatarMarkedForRemoval] = useState(false);
   const [avatarDirty, setAvatarDirty] = useState(false);
+  const compactWeb = Platform.OS === 'web' && width < 760;
   const avatarBase64Ref = useRef<string | null>(null);
   const avatarMimeTypeRef = useRef<string | null>(null);
 
@@ -282,8 +284,8 @@ export default function ProfileScreen() {
         title="Edit identity and invite settings."
         description="Profile stays focused on who you are and how referrals work. Currency, language, and workspace defaults now live under Account preferences."
       >
-        <Card style={styles.webProfileCard}>
-          <RNView style={styles.webAvatarRow}>
+        <Card style={[styles.webProfileCard, compactWeb && styles.webCardCompact]}>
+          <RNView style={[styles.webAvatarRow, compactWeb && styles.webAvatarRowCompact]}>
             <RNView style={styles.avatarButton}>
               {avatarPreviewUrl ? (
                 <Image
@@ -304,8 +306,8 @@ export default function ProfileScreen() {
           </RNView>
         </Card>
 
-        <View style={styles.webGrid}>
-          <Card style={styles.webFormCard}>
+        <View style={[styles.webGrid, compactWeb && styles.webGridCompact]}>
+          <Card style={[styles.webFormCard, compactWeb && styles.webCardCompact]}>
             <Text style={styles.webCardTitle}>Identity</Text>
             <Text style={styles.webCardBody}>
               Keep this section focused on your personal details. Account preferences handle currency, language, and web workspace defaults.
@@ -345,7 +347,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </Card>
 
-          <Card style={styles.webInviteCard}>
+          <Card style={[styles.webInviteCard, compactWeb && styles.webCardCompact]}>
             <Text style={styles.webCardTitle}>Invite and referral</Text>
             <Text style={styles.webCardBody}>Your invite code links new people to your Buddy Balance network and can unlock referral Premium time.</Text>
             <Text selectable style={styles.webInviteCode}>{friendCode || 'Setting up...'}</Text>
@@ -964,6 +966,10 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: 'transparent',
   },
+  webAvatarRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   webAvatarCopy: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -972,6 +978,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
+  },
+  webGridCompact: {
+    flexDirection: 'column',
+  },
+  webCardCompact: {
+    width: '100%',
+    minWidth: 0,
   },
   webFormCard: {
     flex: 1,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AlertCircle, ArrowDownToLine, BellRing, ChevronDown, ChevronRight, ChevronUp, Crown, RefreshCcw, Search, TrendingUp, UserMinus, Users, Wallet } from 'lucide-react-native';
 import { Card, Screen } from '@/components/Themed';
@@ -50,6 +50,7 @@ function uniqueCount(values: Array<string | null | undefined>) {
 }
 
 export default function AdminDashboardIndex() {
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [planUsers, setPlanUsers] = useState<AdminPlanUser[]>([]);
@@ -60,6 +61,7 @@ export default function AdminDashboardIndex() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [statsLoadMode, setStatsLoadMode] = useState<StatsLoadMode>('full');
+  const compactWeb = Platform.OS === 'web' && width < 760;
 
   useEffect(() => {
     void fetchStats();
@@ -358,7 +360,7 @@ export default function AdminDashboardIndex() {
         contentInsetAdjustmentBehavior="never"
         automaticallyAdjustContentInsets={false}
       >
-        <View style={styles.topRow}>
+        <View style={[styles.topRow, compactWeb && styles.topRowCompact]}>
           <TouchableOpacity
             style={styles.backToAppButton}
             onPress={() => router.replace((Platform.OS === 'web' ? '/dashboard' : '/(tabs)') as any)}
@@ -382,7 +384,7 @@ export default function AdminDashboardIndex() {
         ) : null}
 
         <View style={styles.heroGrid}>
-          <Card style={styles.heroCard}>
+          <Card style={[styles.heroCard, compactWeb && styles.heroCardCompact]}>
             <View style={[styles.heroIcon, { backgroundColor: 'rgba(99,102,241,0.12)' }]}>
               <Users size={22} color="#6366F1" />
             </View>
@@ -391,7 +393,7 @@ export default function AdminDashboardIndex() {
             <Text style={styles.heroMeta}>{stats?.new_users_7d || 0} new in 7 days</Text>
           </Card>
 
-          <Card style={styles.heroCard}>
+          <Card style={[styles.heroCard, compactWeb && styles.heroCardCompact]}>
             <View style={[styles.heroIcon, { backgroundColor: 'rgba(234,179,8,0.14)' }]}>
               <Crown size={22} color="#CA8A04" />
             </View>
@@ -400,7 +402,7 @@ export default function AdminDashboardIndex() {
             <Text style={styles.heroMeta}>{adoption.premiumShare} of all users</Text>
           </Card>
 
-          <Card style={styles.heroCard}>
+          <Card style={[styles.heroCard, compactWeb && styles.heroCardCompact]}>
             <View style={[styles.heroIcon, { backgroundColor: 'rgba(16,185,129,0.12)' }]}>
               <TrendingUp size={22} color="#10B981" />
             </View>
@@ -409,7 +411,7 @@ export default function AdminDashboardIndex() {
             <Text style={styles.heroMeta}>active in last 7 days</Text>
           </Card>
 
-          <Card style={styles.heroCard}>
+          <Card style={[styles.heroCard, compactWeb && styles.heroCardCompact]}>
             <View style={[styles.heroIcon, { backgroundColor: 'rgba(56,189,248,0.14)' }]}>
               <Wallet size={22} color="#0284C7" />
             </View>
@@ -440,7 +442,7 @@ export default function AdminDashboardIndex() {
 
         <Text style={styles.sectionTitle}>Plans</Text>
         <Card style={styles.planCard}>
-          <View style={styles.planRow}>
+          <View style={[styles.planRow, compactWeb && styles.planRowCompact]}>
             <View>
               <Text style={styles.planTitle}>Premium users</Text>
               <Text style={styles.planCaption}>{adoption.premiumShare} conversion from total users</Text>
@@ -450,7 +452,7 @@ export default function AdminDashboardIndex() {
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: adoption.premiumShare as any }]} />
           </View>
-          <View style={styles.planBreakdownRow}>
+          <View style={[styles.planBreakdownRow, compactWeb && styles.planBreakdownRowCompact]}>
             <Text style={styles.planBreakdownText}>Free: {stats?.free_users || 0}</Text>
             <Text style={styles.planBreakdownText}>Premium: {stats?.premium_users || 0}</Text>
           </View>
@@ -458,19 +460,19 @@ export default function AdminDashboardIndex() {
 
         <Text style={styles.sectionTitle}>Managed Premium</Text>
         <Card style={styles.managedPlanCard}>
-          <View style={styles.managedPlanHeader}>
+          <View style={[styles.managedPlanHeader, compactWeb && styles.managedPlanHeaderCompact]}>
             <View style={styles.managedPlanCopy}>
               <Text style={styles.managedPlanTitle}>Membership control inside the dashboard</Text>
               <Text style={styles.managedPlanText}>Search a user and switch their tier without opening a separate screen.</Text>
             </View>
-            <View style={styles.managedPlanSummary}>
+            <View style={[styles.managedPlanSummary, compactWeb && styles.managedPlanSummaryCompact]}>
               <Text style={styles.managedPlanSummaryValue}>{stats?.premium_users || 0}</Text>
               <Text style={styles.managedPlanSummaryLabel}>premium</Text>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.managedPlanToggle}
+            style={[styles.managedPlanToggle, compactWeb && styles.managedPlanToggleCompact]}
             activeOpacity={0.85}
             onPress={() => setPlanUsersExpanded((current) => !current)}
           >
@@ -507,7 +509,7 @@ export default function AdminDashboardIndex() {
                   const displayName = user.full_name?.trim() || user.email || 'Unknown user';
 
                   return (
-                    <View key={user.id} style={styles.planUserRow}>
+                    <View key={user.id} style={[styles.planUserRow, compactWeb && styles.planUserRowCompact]}>
                       <View style={styles.planUserLeft}>
                         <View style={[styles.planUserAvatar, normalizedPlan === 'premium' ? styles.planUserAvatarPremium : null]}>
                           <Text style={[styles.planUserAvatarText, normalizedPlan === 'premium' ? styles.planUserAvatarTextPremium : null]}>
@@ -520,11 +522,11 @@ export default function AdminDashboardIndex() {
                         </View>
                       </View>
 
-                      <View style={styles.planUserRight}>
+                      <View style={[styles.planUserRight, compactWeb && styles.planUserRightCompact]}>
                         <Text style={[styles.inlinePlanBadge, normalizedPlan === 'premium' ? styles.inlinePlanBadgePremium : styles.inlinePlanBadgeFree]}>
                           {getPlanLabel(normalizedPlan)}
                         </Text>
-                        <View style={styles.inlinePlanActions}>
+                        <View style={[styles.inlinePlanActions, compactWeb && styles.inlinePlanActionsCompact]}>
                           <TouchableOpacity
                             style={[styles.inlinePlanButton, normalizedPlan === 'free' ? styles.inlinePlanButtonActive : null]}
                             disabled={isSaving || normalizedPlan === 'free'}
@@ -639,14 +641,14 @@ export default function AdminDashboardIndex() {
 
         <Text style={styles.sectionTitle}>Store Metrics</Text>
         <Card style={styles.externalCard}>
-          <View style={styles.externalRow}>
+          <View style={[styles.externalRow, compactWeb && styles.externalRowCompact]}>
             <ArrowDownToLine size={18} color="#475569" />
             <View style={styles.externalCopy}>
               <Text style={styles.externalTitle}>Downloads</Text>
               <Text style={styles.externalText}>Needs App Store Connect / Play Console or an analytics SDK. Supabase alone cannot infer installs reliably.</Text>
             </View>
           </View>
-          <View style={styles.externalRow}>
+          <View style={[styles.externalRow, compactWeb && styles.externalRowCompact]}>
             <UserMinus size={18} color="#475569" />
             <View style={styles.externalCopy}>
               <Text style={styles.externalTitle}>Uninstalls</Text>
@@ -707,6 +709,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: 'transparent',
+  },
+  topRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   backToAppButton: {
     alignSelf: 'flex-start',
@@ -769,6 +776,9 @@ const styles = StyleSheet.create({
     width: '48%',
     marginBottom: 12,
     padding: 16,
+  },
+  heroCardCompact: {
+    width: '100%',
   },
   heroIcon: {
     width: 42,
@@ -860,6 +870,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: 'transparent',
   },
+  planRowCompact: {
+    flexDirection: 'column',
+    gap: 10,
+  },
   planTitle: {
     fontSize: 16,
     fontWeight: '800',
@@ -892,6 +906,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: 'transparent',
   },
+  planBreakdownRowCompact: {
+    flexDirection: 'column',
+    gap: 6,
+  },
   planBreakdownText: {
     fontSize: 12,
     fontWeight: '700',
@@ -907,6 +925,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     backgroundColor: 'transparent',
+  },
+  managedPlanHeaderCompact: {
+    flexDirection: 'column',
   },
   managedPlanCopy: {
     flex: 1,
@@ -931,6 +952,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
     alignItems: 'center',
   },
+  managedPlanSummaryCompact: {
+    alignSelf: 'flex-start',
+  },
   managedPlanSummaryValue: {
     fontSize: 24,
     fontWeight: '900',
@@ -954,6 +978,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  managedPlanToggleCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   managedPlanToggleCopy: {
     flex: 1,
@@ -1012,6 +1040,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  planUserRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   planUserLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1057,6 +1089,10 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: 'transparent',
   },
+  planUserRightCompact: {
+    width: '100%',
+    alignItems: 'flex-start',
+  },
   inlinePlanBadge: {
     fontSize: 11,
     fontWeight: '800',
@@ -1077,6 +1113,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     backgroundColor: 'transparent',
+  },
+  inlinePlanActionsCompact: {
+    flexWrap: 'wrap',
   },
   inlinePlanButton: {
     paddingHorizontal: 10,
@@ -1123,6 +1162,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     backgroundColor: 'transparent',
+  },
+  externalRowCompact: {
+    flexDirection: 'column',
   },
   externalCopy: {
     flex: 1,

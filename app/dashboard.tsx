@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   View as RNView,
+  useWindowDimensions,
 } from 'react-native';
 import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 import {
@@ -112,16 +113,18 @@ function WorkspaceAction({
   onPress,
   tone = 'default',
   icon,
+  compact = false,
 }: {
   label: string;
   description: string;
   onPress: () => void;
   tone?: 'default' | 'primary';
   icon: React.ReactNode;
+  compact?: boolean;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.actionCard, tone === 'primary' ? styles.actionCardPrimary : null]}
+      style={[styles.actionCard, compact && styles.actionCardCompact, tone === 'primary' ? styles.actionCardPrimary : null]}
       activeOpacity={0.88}
       onPress={onPress}
     >
@@ -135,11 +138,13 @@ function WorkspaceAction({
 }
 
 export default function AccountDashboardScreen() {
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const { initialized, user } = useAuthStore();
   const [stats, setStats] = React.useState<DashboardStats>(INITIAL_STATS);
   const [recentRecords, setRecentRecords] = React.useState<LoanRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const compactWeb = Platform.OS === 'web' && width < 820;
 
   const loadDashboard = React.useCallback(
     async () => {
@@ -310,18 +315,18 @@ export default function AccountDashboardScreen() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      <RNView style={styles.splitGrid}>
-        <Card style={styles.panelCard}>
+      <RNView style={[styles.splitGrid, compactWeb && styles.stackGrid]}>
+        <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
           <Text style={styles.panelTitle}>Balance snapshot</Text>
-          <RNView style={styles.balanceRow}>
-            <RNView style={styles.balanceMetric}>
+          <RNView style={[styles.balanceRow, compactWeb && styles.stackGridTight]}>
+            <RNView style={[styles.balanceMetric, compactWeb && styles.metricCompact]}>
               <RNView style={[styles.balanceIcon, styles.balanceIconGreen]}>
                 <ArrowUpRight size={16} color="#047857" />
               </RNView>
               <Text style={styles.balanceLabel}>They owe you</Text>
               <Text style={styles.balanceValue}>{formatCurrency(stats.lent)}</Text>
             </RNView>
-            <RNView style={styles.balanceMetric}>
+            <RNView style={[styles.balanceMetric, compactWeb && styles.metricCompact]}>
               <RNView style={[styles.balanceIcon, styles.balanceIconRed]}>
                 <ArrowDownLeft size={16} color="#B91C1C" />
               </RNView>
@@ -333,8 +338,8 @@ export default function AccountDashboardScreen() {
 
       </RNView>
 
-      <RNView style={styles.statsGrid}>
-        <Card style={styles.statCard}>
+      <RNView style={[styles.statsGrid, compactWeb && styles.stackGrid]}>
+        <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
           <RNView style={styles.statTopRow}>
             <RNView style={[styles.statIconWrap, styles.statIconDark]}>
               <Wallet size={18} color="#0F172A" />
@@ -345,7 +350,7 @@ export default function AccountDashboardScreen() {
           <Text style={styles.statMeta}>Net across your open money records</Text>
         </Card>
 
-        <Card style={styles.statCard}>
+        <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
           <RNView style={styles.statTopRow}>
             <RNView style={[styles.statIconWrap, styles.statIconBlue]}>
               <Sparkles size={18} color="#1D4ED8" />
@@ -356,7 +361,7 @@ export default function AccountDashboardScreen() {
           <Text style={styles.statMeta}>Live records still in progress</Text>
         </Card>
 
-        <Card style={styles.statCard}>
+        <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
           <RNView style={styles.statTopRow}>
             <RNView style={[styles.statIconWrap, styles.statIconAmber]}>
               <Bell size={18} color="#B45309" />
@@ -367,7 +372,7 @@ export default function AccountDashboardScreen() {
           <Text style={styles.statMeta}>Items waiting for your confirmation</Text>
         </Card>
 
-        <Card style={styles.statCard}>
+        <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
           <RNView style={styles.statTopRow}>
             <RNView style={[styles.statIconWrap, styles.statIconGreen]}>
               <Clock3 size={18} color="#047857" />
@@ -379,42 +384,46 @@ export default function AccountDashboardScreen() {
         </Card>
       </RNView>
 
-      <Card style={styles.panelCard}>
+      <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
         <Text style={styles.panelTitle}>Run the app from here</Text>
         <Text style={styles.panelBody}>
           Start the same core flows you already use on mobile. Account and admin navigation stay in the sidebar so the workspace does not repeat itself.
         </Text>
-        <RNView style={styles.actionGrid}>
+        <RNView style={[styles.actionGrid, compactWeb && styles.stackGridTight]}>
           <WorkspaceAction
             label="New record"
             description="Create a new lend, borrow, or shared item record."
             tone="primary"
             icon={<Plus size={18} color="#FFFFFF" />}
+            compact={compactWeb}
             onPress={() => router.push('/new-loan')}
           />
           <WorkspaceAction
             label="Add friend"
             description="Create a new contact or send a friend-linked invite."
             icon={<UserPlus size={18} color="#4F46E5" />}
+            compact={compactWeb}
             onPress={() => router.push('/new-contact?mode=friend')}
           />
           <WorkspaceAction
             label="Requests"
             description="Review confirmations, invites, and pending actions."
             icon={<Bell size={18} color="#4F46E5" />}
+            compact={compactWeb}
             onPress={() => router.push('/requests')}
           />
           <WorkspaceAction
             label="Contacts"
             description="Open the shared contact list and relationship timeline."
             icon={<Users size={18} color="#4F46E5" />}
+            compact={compactWeb}
             onPress={() => router.push('/(tabs)/contacts' as any)}
           />
         </RNView>
       </Card>
 
-      <Card style={styles.panelCard}>
-        <RNView style={styles.recentHeader}>
+      <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
+        <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
           <Text style={styles.panelTitle}>Recent records</Text>
           <TouchableOpacity onPress={() => void loadDashboard()}>
             <Text style={styles.refreshText}>Refresh</Text>
@@ -439,7 +448,7 @@ export default function AccountDashboardScreen() {
               recentRecords.map((record) => (
                 <TouchableOpacity
                   key={record.id}
-                  style={styles.recordRow}
+                  style={[styles.recordRow, compactWeb && styles.recordRowCompact]}
                   activeOpacity={0.88}
                   onPress={() => router.push(`/loan/${record.id}`)}
                 >
@@ -450,7 +459,7 @@ export default function AccountDashboardScreen() {
                     </Text>
                     <Text style={styles.recordSubmeta}>{getDueLabel(record.due_date)}</Text>
                   </RNView>
-                  <RNView style={styles.recordValueBlock}>
+                  <RNView style={[styles.recordValueBlock, compactWeb && styles.recordValueBlockCompact]}>
                     <Text style={styles.recordValue}>{getRecordValue(record)}</Text>
                     <Text style={styles.recordStatus}>{record.status}</Text>
                   </RNView>
@@ -476,10 +485,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 16,
   },
+  stackGrid: {
+    flexDirection: 'column',
+  },
+  stackGridTight: {
+    flexDirection: 'column',
+    gap: 12,
+  },
   statCard: {
     flex: 1,
     minWidth: 220,
     padding: 20,
+  },
+  statCardCompact: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
   },
   statTopRow: {
     flexDirection: 'row',
@@ -534,6 +555,10 @@ const styles = StyleSheet.create({
     minWidth: 320,
     padding: 22,
   },
+  panelCardCompact: {
+    width: '100%',
+    minWidth: 0,
+  },
   panelTitle: {
     fontSize: 20,
     fontWeight: '900',
@@ -559,6 +584,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  actionCardCompact: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
   },
   actionCardPrimary: {
     backgroundColor: '#101A3A',
@@ -630,6 +660,11 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     padding: 18,
   },
+  metricCompact: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
+  },
   balanceIcon: {
     width: 32,
     height: 32,
@@ -669,6 +704,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  recentHeaderCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   refreshText: {
     fontSize: 13,
@@ -715,6 +754,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  recordRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   recordCopy: {
     flex: 1,
     gap: 4,
@@ -735,6 +778,9 @@ const styles = StyleSheet.create({
   recordValueBlock: {
     alignItems: 'flex-end',
     gap: 4,
+  },
+  recordValueBlockCompact: {
+    alignItems: 'flex-start',
   },
   recordValue: {
     fontSize: 14,

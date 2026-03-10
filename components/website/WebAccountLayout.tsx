@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, usePathname, useRouter, type Href } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 
 import { AppLegalFooter } from '@/components/AppLegalFooter';
 import { Text } from '@/components/Themed';
@@ -44,6 +44,7 @@ export function WebAccountLayout({
   description: string;
   children: React.ReactNode;
 }) {
+  const { width } = useWindowDimensions();
   const pathname = usePathname() || '/dashboard';
   const router = useRouter();
   const { user, role, planTier, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
@@ -53,6 +54,8 @@ export function WebAccountLayout({
     'Account';
   const normalizedRole = String(role || '').toLowerCase().trim();
   const hasAdminAccess = normalizedRole === 'admin' || normalizedRole === 'administrator';
+  const compact = width < 980;
+  const mobile = width < 720;
   const accountNav: AccountNavItem[] = hasAdminAccess
     ? [...BASE_ACCOUNT_NAV, ADMIN_NAV_ITEM]
     : BASE_ACCOUNT_NAV;
@@ -71,23 +74,23 @@ export function WebAccountLayout({
   return (
     <ScrollView
       style={styles.page}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, mobile && styles.scrollContentMobile]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.topbarSticky}>
+      <View style={[styles.topbarSticky, compact && styles.topbarStatic]}>
         <View style={styles.shellFrame}>
-          <View style={styles.topbar}>
+          <View style={[styles.topbar, mobile && styles.topbarMobile]}>
             <View>
-              <Text style={styles.productLabel}>Buddy Balance dashboard</Text>
+              <Text style={[styles.productLabel, mobile && styles.productLabelMobile]}>Buddy Balance dashboard</Text>
               <Text style={styles.productSubcopy}>The web workspace for the same Supabase account you use in the app.</Text>
             </View>
-            <View style={styles.topbarActions}>
+            <View style={[styles.topbarActions, mobile && styles.topbarActionsMobile]}>
               <Link href="/" asChild>
-                <Pressable style={styles.siteButton}>
+                <Pressable style={[styles.siteButton, mobile && styles.topbarActionButtonMobile]}>
                   <Text style={styles.siteButtonText}>Public site</Text>
                 </Pressable>
               </Link>
-              <TouchableOpacity style={styles.signOutButton} onPress={() => void signOut()}>
+              <TouchableOpacity style={[styles.signOutButton, mobile && styles.topbarActionButtonMobile]} onPress={() => void signOut()}>
                 <Text style={styles.signOutButtonText}>Sign out</Text>
               </TouchableOpacity>
             </View>
@@ -96,9 +99,9 @@ export function WebAccountLayout({
       </View>
 
       <View style={styles.shellFrame}>
-        <View style={styles.main}>
-          <View style={styles.sidebar}>
-            <View style={styles.profileCard}>
+        <View style={[styles.main, compact && styles.mainCompact]}>
+          <View style={[styles.sidebar, compact && styles.sidebarCompact]}>
+            <View style={[styles.profileCard, mobile && styles.profileCardMobile]}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
               </View>
@@ -109,12 +112,12 @@ export function WebAccountLayout({
               </Text>
             </View>
 
-            <View style={styles.navCard}>
+            <View style={[styles.navCard, mobile && styles.navCardMobile]}>
               {accountNav.map((item) => {
                 const active = matchesPath(pathname, item.matches);
                 return (
                   <Link key={item.label} href={item.href} asChild>
-                    <Pressable style={StyleSheet.flatten([styles.navLink, active && styles.navLinkActive])}>
+                    <Pressable style={StyleSheet.flatten([styles.navLink, mobile && styles.navLinkMobile, active && styles.navLinkActive])}>
                       <Text style={[styles.navText, active && styles.navTextActive]}>{item.label}</Text>
                     </Pressable>
                   </Link>
@@ -123,11 +126,11 @@ export function WebAccountLayout({
             </View>
           </View>
 
-          <View style={styles.content}>
-            <View style={styles.headerCard}>
+          <View style={[styles.content, compact && styles.contentCompact]}>
+            <View style={[styles.headerCard, mobile && styles.headerCardMobile]}>
               {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.description}>{description}</Text>
+              <Text style={[styles.title, mobile && styles.titleMobile]}>{title}</Text>
+              <Text style={[styles.description, mobile && styles.descriptionMobile]}>{description}</Text>
             </View>
 
             <View style={styles.body}>{children}</View>
@@ -150,6 +153,10 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     gap: 18,
   },
+  scrollContentMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
   shellFrame: {
     width: '100%',
     maxWidth: 1280,
@@ -166,6 +173,10 @@ const styles = StyleSheet.create({
         }
       : null),
   },
+  topbarStatic: {
+    position: 'relative',
+    top: 'auto',
+  },
   topbar: {
     borderRadius: 24,
     padding: 20,
@@ -178,10 +189,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 14,
   },
+  topbarMobile: {
+    padding: 16,
+    borderRadius: 18,
+  },
   productLabel: {
     fontSize: 18,
     fontWeight: '900',
     color: '#0F172A',
+  },
+  productLabelMobile: {
+    fontSize: 16,
   },
   productSubcopy: {
     marginTop: 4,
@@ -193,6 +211,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     flexWrap: 'wrap',
+  },
+  topbarActionsMobile: {
+    width: '100%',
+  },
+  topbarActionButtonMobile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   siteButton: {
     minHeight: 42,
@@ -226,9 +252,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexWrap: 'wrap',
   },
+  mainCompact: {
+    flexDirection: 'column',
+  },
   sidebar: {
     width: 290,
     gap: 14,
+  },
+  sidebarCompact: {
+    width: '100%',
   },
   profileCard: {
     borderRadius: 28,
@@ -236,6 +268,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#DDE5FF',
+  },
+  profileCardMobile: {
+    padding: 18,
+    borderRadius: 22,
   },
   avatar: {
     width: 56,
@@ -280,12 +316,20 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     gap: 6,
   },
+  navCardMobile: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   navLink: {
     minHeight: 44,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
     justifyContent: 'center',
+  },
+  navLinkMobile: {
+    flexBasis: '48%',
   },
   navLinkActive: {
     backgroundColor: '#EEF2FF',
@@ -303,12 +347,21 @@ const styles = StyleSheet.create({
     minWidth: 320,
     gap: 16,
   },
+  contentCompact: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
+  },
   headerCard: {
     borderRadius: 32,
     padding: 28,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#DDE5FF',
+  },
+  headerCardMobile: {
+    borderRadius: 22,
+    padding: 18,
   },
   eyebrow: {
     fontSize: 12,
@@ -324,11 +377,19 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0F172A',
   },
+  titleMobile: {
+    fontSize: 28,
+    lineHeight: 32,
+  },
   description: {
     marginTop: 12,
     fontSize: 17,
     lineHeight: 28,
     color: '#475569',
+  },
+  descriptionMobile: {
+    fontSize: 15,
+    lineHeight: 24,
   },
   body: {
     gap: 16,

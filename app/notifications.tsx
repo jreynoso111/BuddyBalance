@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, View as RNView, Platform } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, View as RNView, Platform, useWindowDimensions } from 'react-native';
 import { Redirect, Stack } from 'expo-router';
 import { Screen, Card, Text } from '@/components/Themed';
 import { useAuthStore } from '@/store/authStore';
@@ -20,6 +20,7 @@ import { WebAccountLayout } from '@/components/website/WebAccountLayout';
 type ToggleKey = 'push_enabled' | 'email_enabled' | 'reminder_enabled' | 'marketing_enabled';
 
 export default function NotificationsScreen() {
+  const { width } = useWindowDimensions();
   const { user, initialized } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<ToggleKey | null>(null);
@@ -27,6 +28,7 @@ export default function NotificationsScreen() {
   const [prefs, setPrefs] = useState<Omit<UserPreferences, 'user_id'>>({
     ...DEFAULT_USER_PREFERENCES,
   });
+  const compactWeb = Platform.OS === 'web' && width < 760;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -166,6 +168,7 @@ export default function NotificationsScreen() {
             value={prefs.push_enabled}
             onChange={() => togglePreference('push_enabled')}
             disabled={!!saving}
+            compact={compactWeb}
           />
           <PreferenceRow
             title="Email Notifications"
@@ -173,6 +176,7 @@ export default function NotificationsScreen() {
             value={prefs.email_enabled}
             onChange={() => togglePreference('email_enabled')}
             disabled={!!saving}
+            compact={compactWeb}
           />
           <PreferenceRow
             title="Payment Reminders"
@@ -180,6 +184,7 @@ export default function NotificationsScreen() {
             value={prefs.reminder_enabled}
             onChange={() => togglePreference('reminder_enabled')}
             disabled={!!saving}
+            compact={compactWeb}
           />
           <PreferenceRow
             title="Product Updates"
@@ -188,6 +193,7 @@ export default function NotificationsScreen() {
             onChange={() => togglePreference('marketing_enabled')}
             noBorder
             disabled={!!saving}
+            compact={compactWeb}
           />
         </Card>
         <Card style={styles.webStatusCard}>
@@ -254,6 +260,7 @@ function PreferenceRow({
   onChange,
   noBorder = false,
   disabled = false,
+  compact = false,
 }: {
   title: string;
   subtitle: string;
@@ -261,10 +268,11 @@ function PreferenceRow({
   onChange: () => void;
   noBorder?: boolean;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <RNView style={[styles.row, noBorder && styles.noBorder]}>
-      <RNView style={styles.rowText}>
+    <RNView style={[styles.row, compact && styles.rowCompact, noBorder && styles.noBorder]}>
+      <RNView style={[styles.rowText, compact && styles.rowTextCompact]}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowSubtitle}>{subtitle}</Text>
       </RNView>
@@ -314,6 +322,11 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
+  rowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   noBorder: {
     borderBottomWidth: 0,
   },
@@ -321,6 +334,9 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
     backgroundColor: 'transparent',
+  },
+  rowTextCompact: {
+    marginRight: 0,
   },
   rowTitle: {
     fontSize: 15,

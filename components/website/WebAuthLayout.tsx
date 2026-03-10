@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, type Href } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppLegalFooter } from '@/components/AppLegalFooter';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -26,20 +26,28 @@ export function WebAuthLayout({
   children: React.ReactNode;
   altAction?: AuthAction;
 }) {
+  const { width } = useWindowDimensions();
+  const compact = width < 960;
+  const mobile = width < 720;
+
   return (
-    <View style={styles.page}>
-      <View style={styles.shell}>
-        <View style={styles.leftColumn}>
-          <View style={styles.heroCard}>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={[styles.pageContent, mobile && styles.pageContentMobile]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={[styles.shell, compact && styles.shellCompact]}>
+        <View style={[styles.leftColumn, compact && styles.columnCompact]}>
+          <View style={[styles.heroCard, mobile && styles.surfaceMobile]}>
             <Link href="/" asChild>
               <Pressable style={styles.brandWrap}>
                 <BrandLogo size="lg" showWordmark />
               </Pressable>
             </Link>
 
-            <Text style={styles.eyebrow}>{eyebrow}</Text>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.description}>{description}</Text>
+            <Text style={[styles.eyebrow, mobile && styles.eyebrowMobile]}>{eyebrow}</Text>
+            <Text style={[styles.title, compact && styles.titleCompact, mobile && styles.titleMobile]}>{title}</Text>
+            <Text style={[styles.description, compact && styles.descriptionCompact]}>{description}</Text>
 
             <View style={styles.highlightList}>
               {highlights.map((item) => (
@@ -61,8 +69,8 @@ export function WebAuthLayout({
           </View>
         </View>
 
-        <View style={styles.rightColumn}>
-          <View style={styles.panel}>
+        <View style={[styles.rightColumn, compact && styles.columnCompact]}>
+          <View style={[styles.panel, mobile && styles.surfaceMobile]}>
             {altAction ? (
               <Link href={altAction.href} asChild>
                 <Pressable style={styles.altAction}>
@@ -75,7 +83,7 @@ export function WebAuthLayout({
           </View>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -84,24 +92,40 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#EEF3FF',
   },
+  pageContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  pageContentMobile: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
   shell: {
-    flex: 1,
     width: '100%',
     maxWidth: 1240,
     alignSelf: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 20,
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
+  },
+  shellCompact: {
+    flexDirection: 'column',
   },
   leftColumn: {
     flex: 1.08,
     minWidth: 320,
   },
+  rightColumn: {
+    flex: 0.92,
+    minWidth: 320,
+  },
+  columnCompact: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
+  },
   heroCard: {
-    flex: 1,
     borderRadius: 36,
     padding: 28,
     backgroundColor: 'rgba(255,255,255,0.86)',
@@ -112,6 +136,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 34,
     elevation: 10,
+  },
+  surfaceMobile: {
+    borderRadius: 24,
+    padding: 18,
   },
   brandWrap: {
     alignSelf: 'flex-start',
@@ -125,6 +153,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
+  eyebrowMobile: {
+    marginTop: 20,
+  },
   title: {
     marginTop: 14,
     fontSize: 44,
@@ -133,12 +164,24 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     maxWidth: 580,
   },
+  titleCompact: {
+    fontSize: 34,
+    lineHeight: 38,
+  },
+  titleMobile: {
+    fontSize: 28,
+    lineHeight: 32,
+  },
   description: {
     marginTop: 16,
     fontSize: 18,
     lineHeight: 29,
     color: '#475569',
     maxWidth: 580,
+  },
+  descriptionCompact: {
+    fontSize: 16,
+    lineHeight: 25,
   },
   highlightList: {
     marginTop: 24,
@@ -183,12 +226,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
   },
-  rightColumn: {
-    flex: 0.92,
-    minWidth: 320,
-  },
   panel: {
-    flex: 1,
     borderRadius: 36,
     padding: 28,
     backgroundColor: '#FFFFFF',

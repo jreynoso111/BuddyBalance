@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View as RNView, Platform } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View as RNView, Platform, useWindowDimensions } from 'react-native';
 import { Redirect, Stack } from 'expo-router';
 import { Screen, Card, Text } from '@/components/Themed';
 import { useAuthStore } from '@/store/authStore';
@@ -11,6 +11,7 @@ import { getBiometricCapability, promptBiometricVerification } from '@/services/
 import { WebAccountLayout } from '@/components/website/WebAccountLayout';
 
 export default function SecurityScreen() {
+  const { width } = useWindowDimensions();
   const { user, initialized } = useAuthStore();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('biometrics');
@@ -20,6 +21,7 @@ export default function SecurityScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const compactWeb = Platform.OS === 'web' && width < 760;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -225,9 +227,9 @@ export default function SecurityScreen() {
         title="Security controls for the same Buddy Balance account."
         description="Change password, review biometric lock state, and sign out other sessions from a web-friendly account surface."
       >
-        <Card style={styles.webSecurityCard}>
-          <RNView style={styles.row}>
-            <RNView style={styles.rowText}>
+        <Card style={[styles.webSecurityCard, compactWeb && styles.webSecurityCardCompact]}>
+          <RNView style={[styles.row, compactWeb && styles.rowCompact]}>
+            <RNView style={[styles.rowText, compactWeb && styles.rowTextCompact]}>
               <Text style={styles.rowTitle}>Biometric Lock</Text>
               <Text style={styles.rowSubtitle}>{biometricSubtitle}</Text>
             </RNView>
@@ -249,8 +251,8 @@ export default function SecurityScreen() {
           </TouchableOpacity>
         </Card>
 
-        <RNView style={styles.webSecurityGrid}>
-          <Card style={styles.webSecurityForm}>
+        <RNView style={[styles.webSecurityGrid, compactWeb && styles.webSecurityGridCompact]}>
+          <Card style={[styles.webSecurityForm, compactWeb && styles.webSecurityFormCompact]}>
             <Text style={styles.sectionTitle}>Change Password</Text>
             <TextInput
               secureTextEntry
@@ -275,7 +277,7 @@ export default function SecurityScreen() {
             </TouchableOpacity>
           </Card>
 
-          <Card style={styles.webSecurityForm}>
+          <Card style={[styles.webSecurityForm, compactWeb && styles.webSecurityFormCompact]}>
             <Text style={styles.sectionTitle}>Session Control</Text>
             <Text style={styles.rowSubtitle}>
               If another browser or device still has access, force a global sign out for all active sessions tied to this account.
@@ -371,15 +373,25 @@ const styles = StyleSheet.create({
   webSecurityCard: {
     padding: 18,
   },
+  webSecurityCardCompact: {
+    padding: 16,
+  },
   webSecurityGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
   },
+  webSecurityGridCompact: {
+    flexDirection: 'column',
+  },
   webSecurityForm: {
     flex: 1,
     minWidth: 320,
     padding: 18,
+  },
+  webSecurityFormCompact: {
+    width: '100%',
+    minWidth: 0,
   },
   row: {
     flexDirection: 'row',
@@ -387,10 +399,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: 'transparent',
   },
+  rowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   rowText: {
     flex: 1,
     marginRight: 10,
     backgroundColor: 'transparent',
+  },
+  rowTextCompact: {
+    marginRight: 0,
   },
   rowTitle: {
     fontSize: 15,

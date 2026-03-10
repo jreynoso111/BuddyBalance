@@ -108,10 +108,11 @@ export default function LandingPage() {
                 <View style={styles.webHighlights}>
                     <PublicCard
                         title="What new users notice first"
-                        description="Buddy Balance is designed to make shared activity easy to understand: who updated something, what changed, and what still needs attention."
+                        description="Buddy Balance is designed to make shared activity easy to understand: who updated something, what changed, what still needs attention, and how much money is still owed between friends or family."
                     >
                         <View style={styles.signalGrid}>
                             <SignalChip label="Shared history stays readable" />
+                            <SignalChip label="Track money owed to friends or family" />
                             <SignalChip label="Contacts are easy to manage" />
                             <SignalChip label="Updates stay in context" />
                             <SignalChip label="Reminders are easy to follow" />
