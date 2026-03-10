@@ -2,7 +2,6 @@ import React from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, type Href } from 'expo-router';
 import { Screen, Card, Text } from '@/components/Themed';
-import { LinearGradient } from 'expo-linear-gradient';
 import { PublicSiteLayout } from '@/components/website/PublicSiteLayout';
 
 const SECTIONS = [
@@ -48,16 +47,11 @@ const SECTIONS = [
   },
 ] as const;
 
-const HIGHLIGHTS = [
-  'Your account data is stored so the app can authenticate you and render balances correctly.',
-  'Shared records and event history can be visible to the other person involved in that relationship.',
-  'Buddy Balance is not a payment processor; it is a tracking and coordination product.',
-] as const;
-
 export default function PrivacyPolicyScreen() {
   if (Platform.OS === 'web') {
     return (
       <PublicSiteLayout
+        hideHero
         title="Privacy is the policy branch of the Buddy Balance support section."
         description="Buddy Balance is built around shared activity between connected people, so this policy explains both the personal data you provide and the event history that can become visible to other participants."
         actions={[
@@ -65,17 +59,15 @@ export default function PrivacyPolicyScreen() {
           { href: '/contact' as Href, label: 'Contact support', variant: 'secondary' },
         ]}
       >
-        <LinearGradient colors={['rgba(255,255,255,0.94)', 'rgba(255,255,255,0.74)']} style={styles.summaryPanel}>
-          <Text style={styles.summaryLabel}>AT A GLANCE</Text>
-          <View style={styles.summaryList}>
-            {HIGHLIGHTS.map((item) => (
-              <View key={item} style={styles.summaryRow}>
-                <View style={styles.summaryDot} />
-                <Text style={styles.summaryText}>{item}</Text>
-              </View>
-            ))}
-          </View>
-        </LinearGradient>
+        <View style={styles.webNoticeCard}>
+          <Text style={styles.webNoticeEyebrow}>IMPORTANT</Text>
+          <Text style={styles.webNoticeTitle}>Buddy Balance does not handle real money.</Text>
+          <Text style={styles.webNoticeStrongLine}>Not a payment processor. No bank connection. No money movement.</Text>
+          <Text style={styles.webNoticeBody}>
+            It does not move funds and does not connect to bank accounts. The product stores records and shared history
+            that users choose to log.
+          </Text>
+        </View>
 
         <View style={styles.articleStack}>
           {SECTIONS.map((section, index) => (
@@ -146,39 +138,38 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 12,
   },
-  summaryPanel: {
+  webNoticeCard: {
     padding: 22,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.72)',
+    borderColor: '#C7D2FE',
+    backgroundColor: 'rgba(255,255,255,0.9)',
   },
-  summaryLabel: {
+  webNoticeEyebrow: {
     color: '#4F46E5',
     fontFamily: 'SpaceMono',
     fontSize: 11,
     letterSpacing: 1.6,
   },
-  summaryList: {
-    marginTop: 14,
-    gap: 10,
+  webNoticeTitle: {
+    marginTop: 10,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+    color: '#111827',
   },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+  webNoticeBody: {
+    marginTop: 10,
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#475569',
   },
-  summaryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: '#5B63FF',
-    marginTop: 8,
-  },
-  summaryText: {
-    flex: 1,
+  webNoticeStrongLine: {
+    marginTop: 10,
     fontSize: 15,
-    lineHeight: 24,
-    color: '#334155',
+    lineHeight: 22,
+    fontWeight: '900',
+    color: '#1E1B4B',
   },
   articleStack: {
     gap: 18,

@@ -71,6 +71,7 @@ export default function FAQScreen() {
   if (Platform.OS === 'web') {
     return (
       <PublicSiteLayout
+        hideHero
         title="FAQ is the fast-answer branch of the Buddy Balance support section."
         description="These answers reflect the current product behavior around records, contacts, notifications, shared history, Premium, and account support."
         actions={[
@@ -78,6 +79,15 @@ export default function FAQScreen() {
           { href: '/contact' as Href, label: 'Contact support', variant: 'secondary' },
         ]}
       >
+        <View style={styles.webNoticeCard}>
+          <Text style={styles.webNoticeEyebrow}>IMPORTANT</Text>
+          <Text style={styles.webNoticeTitle}>Buddy Balance does not handle real money.</Text>
+          <Text style={styles.webNoticeStrongLine}>Not a payment processor. No bank connection. No money movement.</Text>
+          <Text style={styles.webNoticeBody}>
+            Payments, returns, and handoffs happen outside the app and are only recorded here as shared history.
+          </Text>
+        </View>
+
         <View style={styles.webFaqList}>
           {FAQ_ITEMS.map((item, index) => (
             <View key={item.question} style={[styles.webFaqRow, index === 0 && styles.webFaqRowFirst]}>
@@ -143,6 +153,39 @@ const styles = StyleSheet.create({
   faqCard: {
     padding: 18,
     marginBottom: 12,
+  },
+  webNoticeCard: {
+    padding: 22,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  webNoticeEyebrow: {
+    color: '#4F46E5',
+    fontFamily: 'SpaceMono',
+    fontSize: 11,
+    letterSpacing: 1.6,
+  },
+  webNoticeTitle: {
+    marginTop: 10,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  webNoticeBody: {
+    marginTop: 10,
+    fontSize: 16,
+    lineHeight: 26,
+    color: '#475569',
+  },
+  webNoticeStrongLine: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '900',
+    color: '#1E1B4B',
   },
   webFaqList: {
     borderRadius: 26,

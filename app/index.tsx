@@ -64,6 +64,16 @@ export default function LandingPage() {
                     </Text>
                 </View>
 
+                <View style={styles.webNoticeCard}>
+                    <Text style={styles.webNoticeEyebrow}>IMPORTANT</Text>
+                    <Text style={styles.webNoticeTitle}>Buddy Balance does not handle real money.</Text>
+                    <Text style={styles.webNoticeStrongLine}>Not a payment processor. No bank connection. No money movement.</Text>
+                    <Text style={styles.webNoticeBody}>
+                        It does not send funds and does not connect to bank accounts. It helps friends keep a shared
+                        record of things that already happened outside the app.
+                    </Text>
+                </View>
+
                 <View style={styles.webCarouselSection}>
                     <ScrollView
                         horizontal
@@ -298,6 +308,47 @@ const styles = StyleSheet.create({
         fontFamily: 'SpaceMono',
         fontSize: 11,
         letterSpacing: 1.4,
+    },
+    webNoticeCard: {
+        padding: 22,
+        borderRadius: 28,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        borderWidth: 1,
+        borderColor: '#C7D2FE',
+        shadowColor: '#312E81',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.08,
+        shadowRadius: 24,
+        elevation: 6,
+    },
+    webNoticeEyebrow: {
+        color: '#4F46E5',
+        fontFamily: 'SpaceMono',
+        fontSize: 11,
+        letterSpacing: 1.6,
+    },
+    webNoticeTitle: {
+        marginTop: 10,
+        fontSize: 28,
+        lineHeight: 32,
+        fontWeight: '900',
+        color: '#111827',
+        maxWidth: 720,
+    },
+    webNoticeBody: {
+        marginTop: 10,
+        fontSize: 16,
+        lineHeight: 26,
+        color: '#475569',
+        maxWidth: 840,
+    },
+    webNoticeStrongLine: {
+        marginTop: 10,
+        fontSize: 15,
+        lineHeight: 22,
+        fontWeight: '900',
+        color: '#1E1B4B',
+        maxWidth: 840,
     },
     webMagazineGrid: {
         flexDirection: 'row',
