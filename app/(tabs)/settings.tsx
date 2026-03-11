@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image, RefreshControl, Platform, useWindowDimensions } from 'react-native';
 import { Redirect } from 'expo-router';
 import { Text, View, Screen, Card } from '@/components/Themed';
+import { ThemePreferencePicker } from '@/components/ThemeControls';
 import { clearPersistedAuthState, supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { LogOut, User, Bell, Shield, CircleHelp, FileOutput, ChevronRight, Sparkles } from 'lucide-react-native';
@@ -312,6 +313,10 @@ export default function SettingsScreen() {
                             Change the default currency and language for this account without replacing the other account actions.
                         </Text>
 
+                        <ThemePreferencePicker
+                            description="Choose whether Buddy Balance follows the system theme or stays light or dark on this device."
+                        />
+
                         <Text style={styles.webPreferenceLabel}>Default currency</Text>
                         <RNView style={styles.webChipRow}>
                             {CURRENCIES.map((currency) => {
@@ -412,6 +417,12 @@ export default function SettingsScreen() {
                     ))}
                 </Card>
 
+                <Card style={styles.appearanceCard}>
+                    <ThemePreferencePicker
+                        description="Choose whether Buddy Balance follows the system theme or stays light or dark on this device."
+                    />
+                </Card>
+
                 <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} disabled={signingOut}>
                     <LogOut size={20} color="#EF4444" />
                     <Text style={styles.signOutText}>{signingOut ? 'Signing Out...' : 'Sign Out'}</Text>
@@ -480,6 +491,9 @@ const styles = StyleSheet.create({
     menuCard: {
         padding: 0,
         overflow: 'hidden',
+        marginBottom: 24,
+    },
+    appearanceCard: {
         marginBottom: 24,
     },
     item: {

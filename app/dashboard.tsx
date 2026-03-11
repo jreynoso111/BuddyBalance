@@ -22,6 +22,7 @@ import {
 } from 'lucide-react-native';
 
 import { Card, Screen, Text } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
 import { WebAccountLayout } from '@/components/website/WebAccountLayout';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
@@ -122,6 +123,7 @@ function getFilterLabel(filter: DashboardRecordFilter | null) {
 export default function AccountDashboardScreen() {
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const colorScheme = useColorScheme();
   const { initialized, user } = useAuthStore();
   const [stats, setStats] = React.useState<DashboardStats>(INITIAL_STATS);
   const [allRecords, setAllRecords] = React.useState<LoanRecord[]>([]);
@@ -130,6 +132,7 @@ export default function AccountDashboardScreen() {
   const [recentExpanded, setRecentExpanded] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const compactWeb = Platform.OS === 'web' && width < 820;
+  const isDark = colorScheme === 'dark';
 
   const loadDashboard = React.useCallback(
     async () => {
@@ -332,6 +335,7 @@ export default function AccountDashboardScreen() {
           style={({ hovered, pressed }) => [
             styles.dashboardActionButton,
             styles.dashboardActionButtonPrimary,
+            isDark && styles.dashboardActionButtonPrimaryDark,
             styles.interactiveSurface,
             compactWeb && styles.dashboardActionButtonCompact,
             hovered && styles.interactiveSurfaceHovered,
@@ -348,6 +352,7 @@ export default function AccountDashboardScreen() {
         <Pressable
           style={({ hovered, pressed }) => [
             styles.dashboardActionButton,
+            isDark && styles.dashboardActionButtonDark,
             styles.interactiveSurface,
             compactWeb && styles.dashboardActionButtonCompact,
             hovered && styles.interactiveSurfaceHovered,
@@ -355,10 +360,10 @@ export default function AccountDashboardScreen() {
           ]}
           onPress={() => router.push('/new-contact?mode=friend')}
         >
-          <RNView style={styles.dashboardActionIconSecondary}>
-            <UserPlus size={16} color="#4F46E5" />
+          <RNView style={[styles.dashboardActionIconSecondary, isDark && styles.dashboardActionIconSecondaryDark]}>
+            <UserPlus size={16} color={isDark ? '#E2E8F0' : '#4F46E5'} />
           </RNView>
-          <Text style={styles.dashboardActionSecondaryText}>Add friend</Text>
+          <Text style={[styles.dashboardActionSecondaryText, isDark && styles.dashboardActionSecondaryTextDark]}>Add friend</Text>
         </Pressable>
       </RNView>
 
@@ -375,13 +380,13 @@ export default function AccountDashboardScreen() {
         >
           <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
             <RNView style={styles.statTopRow}>
-              <RNView style={[styles.statIconWrap, styles.statIconDark]}>
-                <Wallet size={18} color="#0F172A" />
+              <RNView style={[styles.statIconWrap, styles.statIconDark, isDark && styles.statIconWrapDark]}>
+                <Wallet size={18} color={isDark ? '#E2E8F0' : '#0F172A'} />
               </RNView>
-              <Text style={styles.statEyebrow}>Open balance</Text>
+              <Text style={[styles.statEyebrow, isDark && styles.statEyebrowDark]}>Open balance</Text>
             </RNView>
-            <Text style={styles.statValue}>{formatCurrency(stats.openBalance)}</Text>
-            <Text style={styles.statMeta}>Net across your open money records</Text>
+            <Text style={[styles.statValue, isDark && styles.statValueDark]}>{formatCurrency(stats.openBalance)}</Text>
+            <Text style={[styles.statMeta, isDark && styles.statMetaDark]}>Net across your open money records</Text>
           </Card>
         </Pressable>
 
@@ -397,13 +402,13 @@ export default function AccountDashboardScreen() {
         >
           <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
             <RNView style={styles.statTopRow}>
-              <RNView style={[styles.statIconWrap, styles.statIconBlue]}>
-                <Sparkles size={18} color="#1D4ED8" />
+              <RNView style={[styles.statIconWrap, styles.statIconBlue, isDark && styles.statIconWrapDark]}>
+                <Sparkles size={18} color={isDark ? '#E2E8F0' : '#1D4ED8'} />
               </RNView>
-              <Text style={styles.statEyebrow}>Active records</Text>
+              <Text style={[styles.statEyebrow, isDark && styles.statEyebrowDark]}>Active records</Text>
             </RNView>
-            <Text style={styles.statValue}>{stats.activeRecords}</Text>
-            <Text style={styles.statMeta}>Live records still in progress</Text>
+            <Text style={[styles.statValue, isDark && styles.statValueDark]}>{stats.activeRecords}</Text>
+            <Text style={[styles.statMeta, isDark && styles.statMetaDark]}>Live records still in progress</Text>
           </Card>
         </Pressable>
 
@@ -419,24 +424,25 @@ export default function AccountDashboardScreen() {
         >
           <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
             <RNView style={styles.statTopRow}>
-              <RNView style={[styles.statIconWrap, styles.statIconAmber]}>
-                <Bell size={18} color="#B45309" />
+              <RNView style={[styles.statIconWrap, styles.statIconAmber, isDark && styles.statIconWrapDark]}>
+                <Bell size={18} color={isDark ? '#E2E8F0' : '#B45309'} />
               </RNView>
-              <Text style={styles.statEyebrow}>Pending requests</Text>
+              <Text style={[styles.statEyebrow, isDark && styles.statEyebrowDark]}>Pending requests</Text>
             </RNView>
-            <Text style={styles.statValue}>{stats.pendingRequests}</Text>
-            <Text style={styles.statMeta}>Items waiting for your confirmation</Text>
+            <Text style={[styles.statValue, isDark && styles.statValueDark]}>{stats.pendingRequests}</Text>
+            <Text style={[styles.statMeta, isDark && styles.statMetaDark]}>Items waiting for your confirmation</Text>
           </Card>
         </Pressable>
       </RNView>
 
       <RNView style={[styles.splitGrid, compactWeb && styles.stackGrid]}>
         <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
-          <Text style={styles.panelTitle}>Balance snapshot</Text>
+          <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Balance snapshot</Text>
           <RNView style={[styles.balanceRow, compactWeb && styles.stackGridTight]}>
             <Pressable
               style={({ hovered, pressed }) => [
                 styles.balanceMetric,
+                isDark && styles.balanceMetricDark,
                 styles.interactiveSurface,
                 compactWeb && styles.metricCompact,
                 hovered && styles.interactiveSurfaceHovered,
@@ -447,12 +453,13 @@ export default function AccountDashboardScreen() {
               <RNView style={[styles.balanceIcon, styles.balanceIconGreen]}>
                 <ArrowUpRight size={16} color="#047857" />
               </RNView>
-              <Text style={styles.balanceLabel}>They owe you</Text>
-              <Text style={styles.balanceValue}>{formatCurrency(stats.lent)}</Text>
+              <Text style={[styles.balanceLabel, isDark && styles.balanceLabelDark]}>They owe you</Text>
+              <Text style={[styles.balanceValue, isDark && styles.balanceValueDark]}>{formatCurrency(stats.lent)}</Text>
             </Pressable>
             <Pressable
               style={({ hovered, pressed }) => [
                 styles.balanceMetric,
+                isDark && styles.balanceMetricDark,
                 styles.interactiveSurface,
                 compactWeb && styles.metricCompact,
                 hovered && styles.interactiveSurfaceHovered,
@@ -463,8 +470,8 @@ export default function AccountDashboardScreen() {
               <RNView style={[styles.balanceIcon, styles.balanceIconRed]}>
                 <ArrowDownLeft size={16} color="#B91C1C" />
               </RNView>
-              <Text style={styles.balanceLabel}>You owe</Text>
-              <Text style={styles.balanceValue}>{formatCurrency(stats.borrowed)}</Text>
+              <Text style={[styles.balanceLabel, isDark && styles.balanceLabelDark]}>You owe</Text>
+              <Text style={[styles.balanceValue, isDark && styles.balanceValueDark]}>{formatCurrency(stats.borrowed)}</Text>
             </Pressable>
           </RNView>
         </Card>
@@ -483,13 +490,13 @@ export default function AccountDashboardScreen() {
         >
           <Card style={[styles.statCard, compactWeb && styles.statCardCompact]}>
             <RNView style={styles.statTopRow}>
-              <RNView style={[styles.statIconWrap, styles.statIconGreen]}>
-                <Clock3 size={18} color="#047857" />
+              <RNView style={[styles.statIconWrap, styles.statIconGreen, isDark && styles.statIconWrapDark]}>
+                <Clock3 size={18} color={isDark ? '#E2E8F0' : '#047857'} />
               </RNView>
-              <Text style={styles.statEyebrow}>Due soon</Text>
+              <Text style={[styles.statEyebrow, isDark && styles.statEyebrowDark]}>Due soon</Text>
             </RNView>
-            <Text style={styles.statValue}>{stats.dueSoon}</Text>
-            <Text style={styles.statMeta}>Next 7 days</Text>
+            <Text style={[styles.statValue, isDark && styles.statValueDark]}>{stats.dueSoon}</Text>
+            <Text style={[styles.statMeta, isDark && styles.statMetaDark]}>Next 7 days</Text>
           </Card>
         </Pressable>
       </RNView>
@@ -497,8 +504,8 @@ export default function AccountDashboardScreen() {
       <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
         <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
           <RNView>
-            <Text style={styles.panelTitle}>Open records</Text>
-            <Text style={styles.panelBody}>
+            <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Open records</Text>
+            <Text style={[styles.panelBody, isDark && styles.panelBodyDark]}>
               {getFilterLabel(recordFilter)}: {filteredRecords.length}
             </Text>
           </RNView>
@@ -506,23 +513,23 @@ export default function AccountDashboardScreen() {
             onPress={() => setRecordFilter('open')}
             style={({ hovered, pressed }) => [
               styles.inlineActionButton,
-              hovered && styles.inlineActionButtonHovered,
+              hovered && (isDark ? styles.inlineActionButtonHoveredDark : styles.inlineActionButtonHovered),
               pressed && styles.inlineActionButtonPressed,
             ]}
           >
-            <Text style={styles.refreshText}>Show all</Text>
+            <Text style={[styles.refreshText, isDark && styles.refreshTextDark]}>Show all</Text>
           </Pressable>
         </RNView>
 
         {loading ? (
           <RNView style={styles.loadingState}>
-            <ActivityIndicator size="small" color="#4F46E5" />
-            <Text style={styles.loadingText}>Loading records...</Text>
+            <ActivityIndicator size="small" color={isDark ? '#E2E8F0' : '#4F46E5'} />
+            <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>Loading records...</Text>
           </RNView>
         ) : filteredRecords.length === 0 ? (
-          <RNView style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No records match this view.</Text>
-            <Text style={styles.emptyText}>
+          <RNView style={[styles.emptyState, isDark && styles.emptyStateDark]}>
+            <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>No records match this view.</Text>
+            <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
               Choose another metric or create a new record to populate this section.
             </Text>
           </RNView>
@@ -532,6 +539,7 @@ export default function AccountDashboardScreen() {
               key={record.id}
               style={({ hovered, pressed }) => [
                 styles.recordRow,
+                isDark && styles.recordRowDark,
                 styles.interactiveSurface,
                 compactWeb && styles.recordRowCompact,
                 hovered && styles.interactiveSurfaceHovered,
@@ -540,19 +548,19 @@ export default function AccountDashboardScreen() {
               onPress={() => router.push(`/loan/${record.id}`)}
             >
               <RNView style={styles.recordCopy}>
-                <Text style={styles.recordName}>{record.contacts?.name || 'Unknown contact'}</Text>
-                <Text style={styles.recordMeta}>
+                <Text style={[styles.recordName, isDark && styles.recordNameDark]}>{record.contacts?.name || 'Unknown contact'}</Text>
+                <Text style={[styles.recordMeta, isDark && styles.recordMetaDark]}>
                   {record.category === 'item'
                     ? 'Item record'
                     : record.type === 'lent'
                       ? 'Lent record'
                       : 'Borrowed record'}
                 </Text>
-                <Text style={styles.recordSubmeta}>{getDueLabel(record.due_date)}</Text>
+                <Text style={[styles.recordSubmeta, isDark && styles.recordSubmetaDark]}>{getDueLabel(record.due_date)}</Text>
               </RNView>
               <RNView style={[styles.recordValueBlock, compactWeb && styles.recordValueBlockCompact]}>
-                <Text style={styles.recordValue}>{getRecordValue(record)}</Text>
-                <Text style={styles.recordStatus}>{record.status}</Text>
+                <Text style={[styles.recordValue, isDark && styles.recordValueDark]}>{getRecordValue(record)}</Text>
+                <Text style={[styles.recordStatus, isDark && styles.recordStatusDark]}>{record.status}</Text>
               </RNView>
             </Pressable>
           ))
@@ -561,39 +569,43 @@ export default function AccountDashboardScreen() {
 
       <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
         <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
-          <Text style={styles.panelTitle}>Recent records</Text>
+          <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Recent records</Text>
           <Pressable
             onPress={() => setRecentExpanded((current) => !current)}
             style={({ hovered, pressed }) => [
               styles.sectionToggle,
               styles.interactiveButtonInline,
-              hovered && styles.inlineActionButtonHovered,
+              hovered && (isDark ? styles.inlineActionButtonHoveredDark : styles.inlineActionButtonHovered),
               pressed && styles.inlineActionButtonPressed,
             ]}
           >
-            <Text style={styles.refreshText}>{recentExpanded ? 'Hide' : `${recentRecords.length} records`}</Text>
-            {recentExpanded ? <ChevronUp size={16} color="#4F46E5" /> : <ChevronDown size={16} color="#4F46E5" />}
+            <Text style={[styles.refreshText, isDark && styles.refreshTextDark]}>{recentExpanded ? 'Hide' : `${recentRecords.length} records`}</Text>
+            {recentExpanded ? (
+              <ChevronUp size={16} color={isDark ? '#E2E8F0' : '#4F46E5'} />
+            ) : (
+              <ChevronDown size={16} color={isDark ? '#E2E8F0' : '#4F46E5'} />
+            )}
           </Pressable>
         </RNView>
 
         {loading ? (
           <RNView style={styles.loadingState}>
-            <ActivityIndicator size="small" color="#4F46E5" />
-            <Text style={styles.loadingText}>Loading your web workspace...</Text>
+            <ActivityIndicator size="small" color={isDark ? '#E2E8F0' : '#4F46E5'} />
+            <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>Loading your web workspace...</Text>
           </RNView>
         ) : !recentExpanded ? (
-          <RNView style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Recent records are minimized.</Text>
-            <Text style={styles.emptyText}>
+          <RNView style={[styles.emptyState, isDark && styles.emptyStateDark]}>
+            <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>Recent records are minimized.</Text>
+            <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
               Expand this section when you want to review the latest activity across your records.
             </Text>
           </RNView>
         ) : (
           <>
             {recentRecords.length === 0 ? (
-              <RNView style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>No records yet.</Text>
-                <Text style={styles.emptyText}>
+              <RNView style={[styles.emptyState, isDark && styles.emptyStateDark]}>
+                <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>No records yet.</Text>
+                <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
                   Create your first shared record here and this dashboard will start behaving like the online version of the app.
                 </Text>
               </RNView>
@@ -603,6 +615,7 @@ export default function AccountDashboardScreen() {
                   key={record.id}
                   style={({ hovered, pressed }) => [
                     styles.recordRow,
+                    isDark && styles.recordRowDark,
                     styles.interactiveSurface,
                     compactWeb && styles.recordRowCompact,
                     hovered && styles.interactiveSurfaceHovered,
@@ -611,15 +624,15 @@ export default function AccountDashboardScreen() {
                   onPress={() => router.push(`/loan/${record.id}`)}
                 >
                   <RNView style={styles.recordCopy}>
-                    <Text style={styles.recordName}>{record.contacts?.name || 'Unknown contact'}</Text>
-                    <Text style={styles.recordMeta}>
+                    <Text style={[styles.recordName, isDark && styles.recordNameDark]}>{record.contacts?.name || 'Unknown contact'}</Text>
+                    <Text style={[styles.recordMeta, isDark && styles.recordMetaDark]}>
                       {record.category === 'item' ? 'Item record' : record.type === 'lent' ? 'Lent record' : 'Borrowed record'}
                     </Text>
-                    <Text style={styles.recordSubmeta}>{getDueLabel(record.due_date)}</Text>
+                    <Text style={[styles.recordSubmeta, isDark && styles.recordSubmetaDark]}>{getDueLabel(record.due_date)}</Text>
                   </RNView>
                   <RNView style={[styles.recordValueBlock, compactWeb && styles.recordValueBlockCompact]}>
-                    <Text style={styles.recordValue}>{getRecordValue(record)}</Text>
-                    <Text style={styles.recordStatus}>{record.status}</Text>
+                    <Text style={[styles.recordValue, isDark && styles.recordValueDark]}>{getRecordValue(record)}</Text>
+                    <Text style={[styles.recordStatus, isDark && styles.recordStatusDark]}>{record.status}</Text>
                   </RNView>
                 </Pressable>
               ))
@@ -723,6 +736,11 @@ const styles = StyleSheet.create({
   statIconGreen: {
     backgroundColor: '#D1FAE5',
   },
+  statIconWrapDark: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
   statEyebrow: {
     fontSize: 13,
     fontWeight: '800',
@@ -730,17 +748,26 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  statEyebrowDark: {
+    color: '#CBD5E1',
+  },
   statValue: {
     marginTop: 14,
     fontSize: 28,
     fontWeight: '900',
     color: '#0F172A',
   },
+  statValueDark: {
+    color: '#F8FAFC',
+  },
   statMeta: {
     marginTop: 6,
     fontSize: 13,
     lineHeight: 20,
     color: '#64748B',
+  },
+  statMetaDark: {
+    color: '#CBD5E1',
   },
   sectionToggle: {
     flexDirection: 'row',
@@ -757,6 +784,10 @@ const styles = StyleSheet.create({
   },
   inlineActionButtonHovered: {
     backgroundColor: '#EEF2FF',
+    transform: [{ translateY: -1 }],
+  },
+  inlineActionButtonHoveredDark: {
+    backgroundColor: '#1E293B',
     transform: [{ translateY: -1 }],
   },
   inlineActionButtonPressed: {
@@ -789,9 +820,17 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
   },
+  dashboardActionButtonDark: {
+    borderColor: '#334155',
+    backgroundColor: '#0F172A',
+  },
   dashboardActionButtonPrimary: {
     backgroundColor: '#101A3A',
     borderColor: '#101A3A',
+  },
+  dashboardActionButtonPrimaryDark: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
   },
   dashboardActionIconPrimary: {
     width: 28,
@@ -809,6 +848,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#EEF2FF',
   },
+  dashboardActionIconSecondaryDark: {
+    backgroundColor: '#1E293B',
+  },
   dashboardActionPrimaryText: {
     fontSize: 14,
     fontWeight: '900',
@@ -818,6 +860,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
     color: '#4338CA',
+  },
+  dashboardActionSecondaryTextDark: {
+    color: '#E2E8F0',
   },
   panelCard: {
     flex: 1,
@@ -833,11 +878,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0F172A',
   },
+  panelTitleDark: {
+    color: '#F8FAFC',
+  },
   panelBody: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 22,
     color: '#475569',
+  },
+  panelBodyDark: {
+    color: '#CBD5E1',
   },
   linkStack: {
     marginTop: 18,
@@ -876,6 +927,10 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     padding: 18,
   },
+  balanceMetricDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
   metricCompact: {
     width: '100%',
     minWidth: 0,
@@ -900,11 +955,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#64748B',
   },
+  balanceLabelDark: {
+    color: '#CBD5E1',
+  },
   balanceValue: {
     marginTop: 6,
     fontSize: 24,
     fontWeight: '900',
     color: '#0F172A',
+  },
+  balanceValueDark: {
+    color: '#F8FAFC',
   },
   adminCard: {
     borderColor: '#C7D2FE',
@@ -930,6 +991,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#4F46E5',
   },
+  refreshTextDark: {
+    color: '#E2E8F0',
+  },
   loadingState: {
     paddingVertical: 28,
     alignItems: 'center',
@@ -939,6 +1003,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
+  loadingTextDark: {
+    color: '#CBD5E1',
+  },
   emptyState: {
     marginTop: 18,
     borderRadius: 18,
@@ -947,16 +1014,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     padding: 18,
   },
+  emptyStateDark: {
+    borderColor: '#334155',
+    backgroundColor: '#0F172A',
+  },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  emptyTitleDark: {
+    color: '#F8FAFC',
   },
   emptyText: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 22,
     color: '#64748B',
+  },
+  emptyTextDark: {
+    color: '#CBD5E1',
   },
   recordRow: {
     marginTop: 14,
@@ -969,6 +1046,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  recordRowDark: {
+    borderColor: '#334155',
+    backgroundColor: '#0F172A',
   },
   recordRowCompact: {
     flexDirection: 'column',
@@ -983,13 +1064,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
   },
+  recordNameDark: {
+    color: '#F8FAFC',
+  },
   recordMeta: {
     fontSize: 13,
     color: '#475569',
   },
+  recordMetaDark: {
+    color: '#CBD5E1',
+  },
   recordSubmeta: {
     fontSize: 12,
     color: '#64748B',
+  },
+  recordSubmetaDark: {
+    color: '#94A3B8',
   },
   recordValueBlock: {
     alignItems: 'flex-end',
@@ -1003,10 +1093,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0F172A',
   },
+  recordValueDark: {
+    color: '#F8FAFC',
+  },
   recordStatus: {
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
     color: '#6366F1',
+  },
+  recordStatusDark: {
+    color: '#CBD5E1',
   },
 });

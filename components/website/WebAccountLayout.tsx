@@ -4,7 +4,9 @@ import { Platform, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, us
 import { Bell } from 'lucide-react-native';
 
 import { AppLegalFooter } from '@/components/AppLegalFooter';
+import { ThemeToggleButton } from '@/components/ThemeControls';
 import { Text } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
 import { clearPersistedAuthState, supabase } from '@/services/supabase';
 import { getDeviceLanguage } from '@/constants/i18n';
 import { getPlanLabel } from '@/services/subscriptionPlan';
@@ -51,6 +53,7 @@ export function WebAccountLayout({
   const { width } = useWindowDimensions();
   const pathname = usePathname() || '/dashboard';
   const router = useRouter();
+  const colorScheme = useColorScheme();
   const { user, role, planTier, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
   const displayName =
     String(user?.user_metadata?.full_name || '').trim() ||
@@ -58,6 +61,7 @@ export function WebAccountLayout({
     'Account';
   const normalizedRole = String(role || '').toLowerCase().trim();
   const hasAdminAccess = normalizedRole === 'admin' || normalizedRole === 'administrator';
+  const isDark = colorScheme === 'dark';
   const compact = width < 980;
   const mobile = width < 720;
   const accountNav: AccountNavItem[] = hasAdminAccess
@@ -77,16 +81,20 @@ export function WebAccountLayout({
 
   return (
     <ScrollView
-      style={styles.page}
+      style={[styles.page, isDark && styles.pageDark]}
       contentContainerStyle={[styles.scrollContent, mobile && styles.scrollContentMobile]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.topbarSticky, compact && styles.topbarStatic]}>
+      <View style={[styles.topbarSticky, compact && styles.topbarStatic, isDark && styles.topbarStickyDark]}>
         <View style={styles.shellFrame}>
-          <View style={[styles.topbar, mobile && styles.topbarMobile]}>
+          <View style={[styles.topbar, mobile && styles.topbarMobile, isDark && styles.topbarDark]}>
             <View>
-              <Text style={[styles.productLabel, mobile && styles.productLabelMobile]}>Buddy Balance dashboard</Text>
-              <Text style={styles.productSubcopy}>The web workspace for the same Supabase account you use in the app.</Text>
+              <Text style={[styles.productLabel, mobile && styles.productLabelMobile, isDark && styles.productLabelDark]}>
+                Buddy Balance dashboard
+              </Text>
+              <Text style={[styles.productSubcopy, isDark && styles.productSubcopyDark]}>
+                The web workspace for the same Supabase account you use in the app.
+              </Text>
             </View>
             <View style={[styles.topbarActions, mobile && styles.topbarActionsMobile]}>
               <Link href="/notifications" asChild>
@@ -96,14 +104,16 @@ export function WebAccountLayout({
                       styles.iconButton,
                       styles.interactiveButton,
                       mobile && styles.topbarActionButtonMobile,
+                      isDark && styles.iconButtonDark,
                       hovered && styles.interactiveButtonHovered,
                       pressed && styles.interactiveButtonPressed,
                     ])
                   }
                 >
-                  <Bell size={18} color="#1E293B" />
+                  <Bell size={18} color={isDark ? '#E2E8F0' : '#1E293B'} />
                 </Pressable>
               </Link>
+              <ThemeToggleButton compact={mobile} />
               <Link href="/" asChild>
                 <Pressable
                   style={({ hovered, pressed }) =>
@@ -111,23 +121,25 @@ export function WebAccountLayout({
                       styles.siteButton,
                       styles.interactiveButton,
                       mobile && styles.topbarActionButtonMobile,
+                      isDark && styles.siteButtonDark,
                       hovered && styles.interactiveButtonHovered,
                       pressed && styles.interactiveButtonPressed,
                     ])
                   }
                 >
-                  <Text style={styles.siteButtonText}>Public site</Text>
+                  <Text style={[styles.siteButtonText, isDark && styles.siteButtonTextDark]}>Public site</Text>
                 </Pressable>
               </Link>
               <Pressable
                 style={({ hovered, pressed }) =>
                   StyleSheet.flatten([
                     styles.signOutButton,
-                    styles.interactiveButton,
-                    mobile && styles.topbarActionButtonMobile,
-                    hovered && styles.interactiveButtonHovered,
-                    pressed && styles.interactiveButtonPressed,
-                  ])
+                      styles.interactiveButton,
+                      mobile && styles.topbarActionButtonMobile,
+                      isDark && styles.signOutButtonDark,
+                      hovered && styles.interactiveButtonHovered,
+                      pressed && styles.interactiveButtonPressed,
+                    ])
                 }
                 onPress={() => void signOut()}
               >
@@ -141,18 +153,18 @@ export function WebAccountLayout({
       <View style={styles.shellFrame}>
         <View style={[styles.main, compact && styles.mainCompact]}>
           <View style={[styles.sidebar, !compact && styles.sidebarSticky, compact && styles.sidebarCompact]}>
-            <View style={[styles.profileCard, mobile && styles.profileCardMobile]}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+            <View style={[styles.profileCard, mobile && styles.profileCardMobile, isDark && styles.profileCardDark]}>
+              <View style={[styles.avatar, isDark && styles.avatarDark]}>
+                <Text style={[styles.avatarText, isDark && styles.avatarTextDark]}>{displayName.charAt(0).toUpperCase()}</Text>
               </View>
-              <Text style={styles.profileName}>{displayName}</Text>
-              <Text style={styles.profileEmail}>{user?.email}</Text>
-              <Text style={styles.profileMeta}>
+              <Text style={[styles.profileName, isDark && styles.profileNameDark]}>{displayName}</Text>
+              <Text style={[styles.profileEmail, isDark && styles.profileEmailDark]}>{user?.email}</Text>
+              <Text style={[styles.profileMeta, isDark && styles.profileMetaDark]}>
                 {getPlanLabel(planTier)} plan{hasAdminAccess ? ' • Admin' : ''}
               </Text>
             </View>
 
-            <View style={[styles.navCard, mobile && styles.navCardMobile]}>
+            <View style={[styles.navCard, mobile && styles.navCardMobile, isDark && styles.navCardDark]}>
               {accountNav.map((item) => {
                 const active = matchesPath(pathname, item.matches);
                 return (
@@ -163,13 +175,24 @@ export function WebAccountLayout({
                           styles.navLink,
                           styles.interactiveButton,
                           mobile && styles.navLinkMobile,
+                          isDark && styles.navLinkDark,
                           active && styles.navLinkActive,
-                          hovered && styles.navLinkHovered,
+                          active && isDark && styles.navLinkActiveDark,
+                          hovered && (isDark ? styles.navLinkHoveredDark : styles.navLinkHovered),
                           pressed && styles.interactiveButtonPressed,
                         ])
                       }
                     >
-                      <Text style={[styles.navText, active && styles.navTextActive]}>{item.label}</Text>
+                      <Text
+                        style={[
+                          styles.navText,
+                          isDark && styles.navTextDark,
+                          active && styles.navTextActive,
+                          active && isDark && styles.navTextActiveDark,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
                     </Pressable>
                   </Link>
                 );
@@ -179,10 +202,12 @@ export function WebAccountLayout({
 
           <View style={[styles.content, compact && styles.contentCompact]}>
             {hideHeader ? null : (
-              <View style={[styles.headerCard, mobile && styles.headerCardMobile]}>
-                {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-                <Text style={[styles.title, mobile && styles.titleMobile]}>{title}</Text>
-                <Text style={[styles.description, mobile && styles.descriptionMobile]}>{description}</Text>
+              <View style={[styles.headerCard, mobile && styles.headerCardMobile, isDark && styles.headerCardDark]}>
+                {eyebrow ? <Text style={[styles.eyebrow, isDark && styles.eyebrowDark]}>{eyebrow}</Text> : null}
+                <Text style={[styles.title, mobile && styles.titleMobile, isDark && styles.titleDark]}>{title}</Text>
+                <Text style={[styles.description, mobile && styles.descriptionMobile, isDark && styles.descriptionDark]}>
+                  {description}
+                </Text>
               </View>
             )}
             <View style={styles.body}>{children}</View>
@@ -199,6 +224,9 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     backgroundColor: '#F6F8FF',
+  },
+  pageDark: {
+    backgroundColor: '#020617',
   },
   scrollContent: {
     paddingHorizontal: 20,
@@ -225,6 +253,9 @@ const styles = StyleSheet.create({
         }
       : null),
   },
+  topbarStickyDark: {
+    backgroundColor: 'rgba(2,6,23,0.92)',
+  },
   topbarStatic: {
     position: 'relative',
     top: 'auto',
@@ -245,6 +276,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 18,
   },
+  topbarDark: {
+    backgroundColor: 'rgba(15,23,42,0.86)',
+    borderColor: '#334155',
+  },
   productLabel: {
     fontSize: 18,
     fontWeight: '900',
@@ -253,11 +288,17 @@ const styles = StyleSheet.create({
   productLabelMobile: {
     fontSize: 16,
   },
+  productLabelDark: {
+    color: '#F8FAFC',
+  },
   productSubcopy: {
     marginTop: 4,
     fontSize: 13,
     lineHeight: 20,
     color: '#64748B',
+  },
+  productSubcopyDark: {
+    color: '#94A3B8',
   },
   topbarActions: {
     flexDirection: 'row',
@@ -282,6 +323,10 @@ const styles = StyleSheet.create({
     borderColor: '#D6DAFF',
     backgroundColor: '#FFFFFF',
   },
+  siteButtonDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
   iconButton: {
     minHeight: 42,
     minWidth: 42,
@@ -293,6 +338,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconButtonDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
   },
   interactiveButton: {
     ...(Platform.OS === 'web'
@@ -318,12 +367,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1E293B',
   },
+  siteButtonTextDark: {
+    color: '#E2E8F0',
+  },
   signOutButton: {
     minHeight: 42,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: '#101A3A',
+  },
+  signOutButtonDark: {
+    backgroundColor: '#334155',
   },
   signOutButtonText: {
     fontSize: 13,
@@ -366,6 +421,10 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 22,
   },
+  profileCardDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -374,10 +433,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#EEF2FF',
   },
+  avatarDark: {
+    backgroundColor: '#1E293B',
+  },
   avatarText: {
     fontSize: 22,
     fontWeight: '900',
     color: '#4F46E5',
+  },
+  avatarTextDark: {
+    color: '#E2E8F0',
   },
   profileName: {
     marginTop: 14,
@@ -392,6 +457,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#475569',
   },
+  profileNameDark: {
+    color: '#F8FAFC',
+  },
+  profileEmailDark: {
+    color: '#CBD5E1',
+  },
   profileMeta: {
     marginTop: 10,
     fontSize: 12,
@@ -400,6 +471,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+  },
+  profileMetaDark: {
+    color: '#CBD5E1',
   },
   navCard: {
     borderRadius: 28,
@@ -414,6 +488,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  navCardDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
   navLink: {
     minHeight: 50,
     borderRadius: 18,
@@ -424,21 +502,38 @@ const styles = StyleSheet.create({
   navLinkMobile: {
     flexBasis: '48%',
   },
+  navLinkDark: {
+    backgroundColor: 'transparent',
+  },
   navLinkHovered: {
     backgroundColor: '#F8FAFF',
     borderColor: '#D6DAFF',
     borderWidth: 1,
   },
+  navLinkHoveredDark: {
+    backgroundColor: '#111827',
+    borderColor: '#334155',
+    borderWidth: 1,
+  },
   navLinkActive: {
     backgroundColor: '#EEF2FF',
+  },
+  navLinkActiveDark: {
+    backgroundColor: '#334155',
   },
   navText: {
     fontSize: 14,
     fontWeight: '800',
     color: '#334155',
   },
+  navTextDark: {
+    color: '#CBD5E1',
+  },
   navTextActive: {
     color: '#4338CA',
+  },
+  navTextActiveDark: {
+    color: '#F8FAFC',
   },
   content: {
     flex: 1,
@@ -461,6 +556,10 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 18,
   },
+  headerCardDark: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+  },
   eyebrow: {
     fontSize: 12,
     fontWeight: '800',
@@ -468,6 +567,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
     marginBottom: 10,
+  },
+  eyebrowDark: {
+    color: '#CBD5E1',
   },
   title: {
     fontSize: 38,
@@ -479,6 +581,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 32,
   },
+  titleDark: {
+    color: '#F8FAFC',
+  },
   description: {
     marginTop: 12,
     fontSize: 17,
@@ -488,6 +593,9 @@ const styles = StyleSheet.create({
   descriptionMobile: {
     fontSize: 15,
     lineHeight: 24,
+  },
+  descriptionDark: {
+    color: '#CBD5E1',
   },
   body: {
     gap: 16,

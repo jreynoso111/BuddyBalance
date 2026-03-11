@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, usePathname, type Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Apple } from 'lucide-react-native';
 import {
   Pressable,
   ScrollView,
@@ -11,13 +12,17 @@ import {
 
 import { AppLegalFooter } from '@/components/AppLegalFooter';
 import { BrandLogo } from '@/components/BrandLogo';
+import { GoogleLogo } from '@/components/GoogleLogo';
+import { ThemeToggleButton } from '@/components/ThemeControls';
 import { Text } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
 import { useAuthStore } from '@/store/authStore';
 
 type PublicAction = {
   href: Href;
   label: string;
   variant?: 'primary' | 'secondary';
+  icon?: 'app-store' | 'google-play';
 };
 
 type PublicSiteLayoutProps = {
@@ -56,6 +61,36 @@ function isActivePath(currentPath: string, matches: string[]) {
   });
 }
 
+function ActionContent({
+  action,
+  isDark,
+  primary = false,
+}: {
+  action: PublicAction;
+  isDark: boolean;
+  primary?: boolean;
+}) {
+  const iconColor = primary ? '#FFFFFF' : isDark ? '#E2E8F0' : '#101A3A';
+  const iconSize = primary ? 18 : 17;
+
+  return (
+    <View style={styles.actionContent}>
+      {action.icon === 'app-store' ? <Apple size={iconSize} color={iconColor} strokeWidth={2.2} /> : null}
+      {action.icon === 'google-play' ? <GoogleLogo size={iconSize} /> : null}
+      <Text
+        style={[
+          styles.actionLabel,
+          primary ? styles.actionPrimaryLabel : styles.actionSecondaryLabel,
+          primary ? styles.primaryHeroActionLabel : null,
+          !primary && isDark && styles.actionSecondaryLabelDark,
+        ]}
+      >
+        {action.label}
+      </Text>
+    </View>
+  );
+}
+
 export function PublicSiteLayout({
   eyebrow,
   title,
@@ -70,9 +105,11 @@ export function PublicSiteLayout({
 }: PublicSiteLayoutProps) {
   const { width } = useWindowDimensions();
   const pathname = usePathname() || '/';
+  const colorScheme = useColorScheme();
   const user = useAuthStore((state) => state.user);
   const initialized = useAuthStore((state) => state.initialized);
   const hasReadySession = initialized && !!user;
+  const isDark = colorScheme === 'dark';
   const mobile = width < 640;
   const tablet = width < 900;
   const compact = width < 1080;
@@ -82,16 +119,19 @@ export function PublicSiteLayout({
 
   return (
     <ScrollView
-      style={styles.page}
+      style={[styles.page, isDark && styles.pageDark]}
       contentContainerStyle={[styles.content, mobile && styles.contentMobile]}
       showsVerticalScrollIndicator={false}
       stickyHeaderIndices={mobile ? undefined : [1]}
     >
       <View style={styles.backgroundLayer}>
-        <LinearGradient colors={['#EEF2FF', '#F7F1FF', '#FFF5E9']} style={styles.gradientWash} />
-        <View style={[styles.orb, styles.orbLeft]} />
-        <View style={[styles.orb, styles.orbRight]} />
-        <View style={[styles.orb, styles.orbBottom]} />
+        <LinearGradient
+          colors={isDark ? ['#020617', '#0F172A', '#1F2937'] : ['#EEF2FF', '#F7F1FF', '#FFF5E9']}
+          style={styles.gradientWash}
+        />
+        <View style={[styles.orb, styles.orbLeft, isDark && styles.orbLeftDark]} />
+        <View style={[styles.orb, styles.orbRight, isDark && styles.orbRightDark]} />
+        <View style={[styles.orb, styles.orbBottom, isDark && styles.orbBottomDark]} />
       </View>
 
       <View
@@ -105,17 +145,19 @@ export function PublicSiteLayout({
       >
         <View style={styles.shell}>
           <LinearGradient
-            colors={['#FFFFFF', '#F8FAFF']}
-            style={[styles.headerChrome, mobile && styles.headerChromeMobile]}
+            colors={isDark ? ['rgba(15,23,42,0.96)', 'rgba(15,23,42,0.88)'] : ['#FFFFFF', '#F8FAFF']}
+            style={[styles.headerChrome, mobile && styles.headerChromeMobile, isDark && styles.headerChromeDark]}
           >
             <Link href="/" asChild>
               <Pressable style={styles.brandLink}>
                 <View style={styles.brandWrap}>
                   <BrandLogo size={mobile ? 'sm' : 'md'} showWordmark={false} />
                   <View style={styles.brandMeta}>
-                    <Text style={[styles.brandTitle, mobile && styles.brandTitleMobile]}>Buddy Balance</Text>
+                    <Text style={[styles.brandTitle, mobile && styles.brandTitleMobile, isDark && styles.brandTitleDark]}>Buddy Balance</Text>
                     {!tablet ? (
-                      <Text style={styles.brandSubcopy}>Shared tracking for people who actually know each other.</Text>
+                      <Text style={[styles.brandSubcopy, isDark && styles.brandSubcopyDark]}>
+                        Shared tracking for people who actually know each other.
+                      </Text>
                     ) : null}
                   </View>
                 </View>
@@ -131,22 +173,33 @@ export function PublicSiteLayout({
                       style={StyleSheet.flatten([
                         styles.navLink,
                         mobile && styles.navLinkMobile,
+                        isDark && styles.navLinkDark,
                         active ? styles.navLinkActive : null,
+                        active && isDark ? styles.navLinkActiveDark : null,
                       ])}
                     >
-                      <Text style={[styles.navLabel, mobile && styles.navLabelMobile, active ? styles.navLabelActive : null]}>
+                      <Text
+                        style={[
+                          styles.navLabel,
+                          mobile && styles.navLabelMobile,
+                          isDark && styles.navLabelDark,
+                          active ? styles.navLabelActive : null,
+                        ]}
+                      >
                         {item.label}
                       </Text>
                     </Pressable>
                   </Link>
                 );
               })}
+              <ThemeToggleButton compact={mobile} />
               <Link href={hasReadySession ? '/dashboard' : '/(auth)/login'} asChild>
                 <Pressable
                   style={StyleSheet.flatten([
                     styles.accountLink,
                     mobile && styles.accountLinkMobile,
                     hasReadySession && styles.accountLinkActive,
+                    hasReadySession && isDark && styles.accountLinkActiveDark,
                   ])}
                 >
                   <Text style={[styles.accountLabel, hasReadySession && styles.accountLabelActive]}>
@@ -172,30 +225,31 @@ export function PublicSiteLayout({
           {!hideHero ? (
             <View style={[styles.heroShell, compact && styles.heroShellCompact]}>
               <LinearGradient
-                colors={['rgba(255,255,255,0.92)', 'rgba(255,255,255,0.68)']}
-                style={[styles.heroPanel, compact && styles.heroPanelCompact]}
+                colors={isDark ? ['rgba(15,23,42,0.96)', 'rgba(15,23,42,0.84)'] : ['rgba(255,255,255,0.92)', 'rgba(255,255,255,0.68)']}
+                style={[styles.heroPanel, compact && styles.heroPanelCompact, isDark && styles.heroPanelDark]}
               >
                 <View style={styles.heroPanelHeader}>
                   <View style={styles.heroSignalRow}>
                     {SIGNALS.map((signal) => (
-                      <View key={signal} style={styles.signalChip}>
-                        <Text style={styles.signalLabel}>{signal}</Text>
+                      <View key={signal} style={[styles.signalChip, isDark && styles.signalChipDark]}>
+                        <Text style={[styles.signalLabel, isDark && styles.signalLabelDark]}>{signal}</Text>
                       </View>
                     ))}
                   </View>
                 </View>
 
-                {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+                {eyebrow ? <Text style={[styles.eyebrow, isDark && styles.eyebrowDark]}>{eyebrow}</Text> : null}
                 <Text
                   style={[
                     styles.title,
                     compact && styles.titleCompact,
+                    isDark && styles.titleDark,
                     { fontSize: heroTitleSize, lineHeight: heroTitleLineHeight },
                   ]}
                 >
                   {title}
                 </Text>
-                <Text style={[styles.description, mobile && styles.descriptionMobile]}>{description}</Text>
+                <Text style={[styles.description, mobile && styles.descriptionMobile, isDark && styles.descriptionDark]}>{description}</Text>
 
                 {primaryAction ? (
                   <View style={styles.heroCtaBlock}>
@@ -207,15 +261,14 @@ export function PublicSiteLayout({
                           mobile && styles.actionButtonMobile,
                           mobile && styles.primaryHeroActionButtonMobile,
                           styles.actionPrimary,
+                          isDark && styles.actionPrimaryDark,
                         ])}
                       >
-                        <Text style={[styles.actionLabel, styles.primaryHeroActionLabel, styles.actionPrimaryLabel]}>
-                          {primaryAction.label}
-                        </Text>
+                        <ActionContent action={primaryAction} isDark={isDark} primary />
                       </Pressable>
                     </Link>
 
-                    {ctaSupportText ? <Text style={styles.ctaSupportText}>{ctaSupportText}</Text> : null}
+                    {ctaSupportText ? <Text style={[styles.ctaSupportText, isDark && styles.ctaSupportTextDark]}>{ctaSupportText}</Text> : null}
 
                     {secondaryActions?.length ? (
                       <View style={[styles.actions, styles.secondaryActions, mobile && styles.actionsMobile]}>
@@ -226,9 +279,10 @@ export function PublicSiteLayout({
                                 styles.actionButton,
                                 mobile && styles.actionButtonMobile,
                                 styles.actionSecondary,
+                                isDark && styles.actionSecondaryDark,
                               ])}
                             >
-                              <Text style={[styles.actionLabel, styles.actionSecondaryLabel]}>{action.label}</Text>
+                              <ActionContent action={action} isDark={isDark} />
                             </Pressable>
                           </Link>
                         ))}
@@ -240,20 +294,17 @@ export function PublicSiteLayout({
                     {actions.map((action) => (
                       <Link key={`${action.href}:${action.label}`} href={action.href} asChild>
                         <Pressable
-                          style={StyleSheet.flatten([
+                          style={[
                             styles.actionButton,
                             mobile && styles.actionButtonMobile,
-                            action.variant === 'secondary' ? styles.actionSecondary : styles.actionPrimary,
-                          ])}
+                            action.variant === 'secondary'
+                              ? styles.actionSecondary
+                              : styles.actionPrimary,
+                            action.variant !== 'secondary' && isDark && styles.actionPrimaryDark,
+                            action.variant === 'secondary' && isDark && styles.actionSecondaryDark,
+                          ]}
                         >
-                          <Text
-                            style={[
-                              styles.actionLabel,
-                              action.variant === 'secondary' ? styles.actionSecondaryLabel : styles.actionPrimaryLabel,
-                            ]}
-                          >
-                            {action.label}
-                          </Text>
+                          <ActionContent action={action} isDark={isDark} primary={action.variant !== 'secondary'} />
                         </Pressable>
                       </Link>
                     ))}
@@ -271,7 +322,10 @@ export function PublicSiteLayout({
 
           <View style={[styles.body, hideHero && styles.bodyWithoutHero]}>{children}</View>
 
-          <LinearGradient colors={['rgba(15,23,42,0.96)', 'rgba(30,41,59,0.92)']} style={[styles.footerShell, mobile && styles.footerShellMobile]}>
+          <LinearGradient
+            colors={isDark ? ['rgba(2,6,23,0.98)', 'rgba(15,23,42,0.94)'] : ['rgba(15,23,42,0.96)', 'rgba(30,41,59,0.92)']}
+            style={[styles.footerShell, mobile && styles.footerShellMobile]}
+          >
             <View style={[styles.footerRow, mobile && styles.footerRowMobile]}>
               <View style={styles.footerStamp}>
                 <Text style={styles.footerStampText}>MOBILE FIRST</Text>
@@ -299,12 +353,21 @@ export function PublicCard({
   children?: React.ReactNode;
 }) {
   const { width } = useWindowDimensions();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const mobile = width < 640;
 
   return (
-    <LinearGradient colors={['rgba(255,255,255,0.94)', 'rgba(255,255,255,0.7)']} style={[styles.card, mobile && styles.cardMobile]}>
-      <Text style={[styles.cardTitle, mobile && styles.cardTitleMobile]}>{title}</Text>
-      {description ? <Text style={[styles.cardDescription, mobile && styles.cardDescriptionMobile]}>{description}</Text> : null}
+    <LinearGradient
+      colors={isDark ? ['rgba(15,23,42,0.94)', 'rgba(15,23,42,0.82)'] : ['rgba(255,255,255,0.94)', 'rgba(255,255,255,0.7)']}
+      style={[styles.card, mobile && styles.cardMobile, isDark && styles.cardDark]}
+    >
+      <Text style={[styles.cardTitle, mobile && styles.cardTitleMobile, isDark && styles.cardTitleDark]}>{title}</Text>
+      {description ? (
+        <Text style={[styles.cardDescription, mobile && styles.cardDescriptionMobile, isDark && styles.cardDescriptionDark]}>
+          {description}
+        </Text>
+      ) : null}
       {children}
     </LinearGradient>
   );
@@ -314,6 +377,9 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     backgroundColor: '#F8F5FF',
+  },
+  pageDark: {
+    backgroundColor: '#020617',
   },
   content: {
     paddingBottom: 0,
@@ -361,6 +427,15 @@ const styles = StyleSheet.create({
     bottom: -220,
     backgroundColor: 'rgba(244,114,182,0.1)',
   },
+  orbLeftDark: {
+    backgroundColor: 'rgba(148,163,184,0.14)',
+  },
+  orbRightDark: {
+    backgroundColor: 'rgba(100,116,139,0.14)',
+  },
+  orbBottomDark: {
+    backgroundColor: 'rgba(51,65,85,0.18)',
+  },
   shell: {
     width: '100%',
     maxWidth: 1220,
@@ -389,6 +464,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 24,
   },
+  headerChromeDark: {
+    borderColor: 'rgba(71,85,105,0.6)',
+    shadowColor: '#020617',
+  },
   brandLink: {
     flexShrink: 1,
   },
@@ -409,6 +488,9 @@ const styles = StyleSheet.create({
   brandTitleMobile: {
     fontSize: 18,
   },
+  brandTitleDark: {
+    color: '#F8FAFC',
+  },
   brandKicker: {
     fontSize: 12,
     letterSpacing: 2,
@@ -419,6 +501,9 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 13,
     lineHeight: 20,
+  },
+  brandSubcopyDark: {
+    color: '#94A3B8',
   },
   nav: {
     flexDirection: 'row',
@@ -450,9 +535,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     flexGrow: 1,
   },
+  navLinkDark: {
+    backgroundColor: 'rgba(15,23,42,0.7)',
+    borderColor: 'rgba(71,85,105,0.6)',
+  },
   navLinkActive: {
     backgroundColor: '#101A3A',
     borderColor: '#101A3A',
+  },
+  navLinkActiveDark: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
   },
   navLabel: {
     fontSize: 14,
@@ -461,6 +554,9 @@ const styles = StyleSheet.create({
   },
   navLabelMobile: {
     fontSize: 12,
+  },
+  navLabelDark: {
+    color: '#CBD5E1',
   },
   navLabelActive: {
     color: '#F8FAFC',
@@ -482,6 +578,10 @@ const styles = StyleSheet.create({
   accountLinkActive: {
     backgroundColor: '#5B63FF',
     borderColor: '#5B63FF',
+  },
+  accountLinkActiveDark: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
   },
   accountLabel: {
     fontSize: 14,
@@ -526,6 +626,10 @@ const styles = StyleSheet.create({
   heroPanelCompact: {
     padding: 24,
   },
+  heroPanelDark: {
+    borderColor: 'rgba(71,85,105,0.6)',
+    shadowColor: '#020617',
+  },
   heroPanelHeader: {
     gap: 14,
     marginBottom: 16,
@@ -541,10 +645,16 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(15,23,42,0.06)',
   },
+  signalChipDark: {
+    backgroundColor: 'rgba(148,163,184,0.14)',
+  },
   signalLabel: {
     fontSize: 11,
     color: '#334155',
     fontFamily: 'SpaceMono',
+  },
+  signalLabelDark: {
+    color: '#CBD5E1',
   },
   eyebrow: {
     fontSize: 12,
@@ -553,6 +663,9 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceMono',
     textTransform: 'uppercase',
     marginBottom: 12,
+  },
+  eyebrowDark: {
+    color: '#CBD5E1',
   },
   title: {
     fontSize: 54,
@@ -565,6 +678,9 @@ const styles = StyleSheet.create({
     fontSize: 42,
     lineHeight: 46,
   },
+  titleDark: {
+    color: '#F8FAFC',
+  },
   description: {
     marginTop: 18,
     fontSize: 19,
@@ -576,6 +692,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 26,
     marginTop: 14,
+  },
+  descriptionDark: {
+    color: '#CBD5E1',
   },
   heroCtaBlock: {
     marginTop: 28,
@@ -605,6 +724,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     flexGrow: 1,
   },
+  actionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   primaryHeroActionButton: {
     minHeight: 60,
     paddingHorizontal: 24,
@@ -622,9 +747,18 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 8,
   },
+  actionPrimaryDark: {
+    backgroundColor: '#334155',
+    borderColor: '#475569',
+    shadowColor: '#020617',
+  },
   actionSecondary: {
     backgroundColor: 'rgba(255,255,255,0.62)',
     borderColor: '#D6DAFF',
+  },
+  actionSecondaryDark: {
+    backgroundColor: 'rgba(15,23,42,0.78)',
+    borderColor: '#334155',
   },
   actionLabel: {
     fontSize: 14,
@@ -640,12 +774,18 @@ const styles = StyleSheet.create({
   actionSecondaryLabel: {
     color: '#101A3A',
   },
+  actionSecondaryLabelDark: {
+    color: '#E2E8F0',
+  },
   ctaSupportText: {
     marginTop: 12,
     fontSize: 15,
     lineHeight: 24,
     color: '#475569',
     maxWidth: 440,
+  },
+  ctaSupportTextDark: {
+    color: '#CBD5E1',
   },
   heroVisual: {
     width: 420,
@@ -678,11 +818,18 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 22,
   },
+  cardDark: {
+    borderColor: 'rgba(71,85,105,0.6)',
+    shadowColor: '#020617',
+  },
   cardTitle: {
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '900',
     color: '#0F172A',
+  },
+  cardTitleDark: {
+    color: '#F8FAFC',
   },
   cardTitleMobile: {
     fontSize: 20,
@@ -693,6 +840,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: '#475569',
+  },
+  cardDescriptionDark: {
+    color: '#CBD5E1',
   },
   cardDescriptionMobile: {
     fontSize: 14,
@@ -725,7 +875,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   footerStampText: {
-    color: '#C7D2FE',
+    color: '#CBD5E1',
     fontFamily: 'SpaceMono',
     fontSize: 11,
     letterSpacing: 1.8,

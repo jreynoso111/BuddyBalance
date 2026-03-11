@@ -9,11 +9,14 @@ import Animated, {
     Easing
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useColorScheme } from '@/components/useColorScheme';
 
 const { width, height } = Dimensions.get('window');
 
 export const AnimatedBackground = ({ children, style }: { children: React.ReactNode, style?: any }) => {
+    const colorScheme = useColorScheme();
     const progress = useSharedValue(0);
+    const isDark = colorScheme === 'dark';
 
     useEffect(() => {
         progress.value = withRepeat(
@@ -40,21 +43,21 @@ export const AnimatedBackground = ({ children, style }: { children: React.ReactN
     });
 
     return (
-        <View style={[styles.container, style]}>
+        <View style={[styles.container, isDark && styles.containerDark, style]}>
             {/* Abstract Animated Blobs */}
             <Animated.View style={[styles.blob, styles.blob1, animatedStyle1]}>
                 <LinearGradient
-                    colors={['#4F46E5', '#818CF8']}
+                    colors={isDark ? ['#111827', '#1F2937'] : ['#4F46E5', '#818CF8']}
                     style={styles.gradient}
                 />
             </Animated.View>
             <Animated.View style={[styles.blob, styles.blob2, animatedStyle2]}>
                 <LinearGradient
-                    colors={['#7C3AED', '#A78BFA']}
+                    colors={isDark ? ['#1E293B', '#334155'] : ['#7C3AED', '#A78BFA']}
                     style={styles.gradient}
                 />
             </Animated.View>
-            <View style={styles.overlay} />
+            <View style={[styles.overlay, isDark && styles.overlayDark]} />
             <View style={styles.content}>
                 {children}
             </View>
@@ -66,6 +69,9 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FFFFFF', // Clean white background
+    },
+    containerDark: {
+        backgroundColor: '#020617',
     },
     blob: {
         position: 'absolute',
@@ -89,6 +95,9 @@ const styles = StyleSheet.create({
     overlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(255, 255, 255, 0.4)', // Light white overlay
+    },
+    overlayDark: {
+        backgroundColor: 'rgba(2, 6, 23, 0.42)',
     },
     content: {
         flex: 1,

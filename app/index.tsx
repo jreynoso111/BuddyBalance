@@ -14,10 +14,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PublicCard, PublicSiteLayout } from '@/components/website/PublicSiteLayout';
 import { AppShowcase, InsideAppGallery } from '@/components/website/AppShowcase';
+import { useColorScheme } from '@/components/useColorScheme';
+import { PREMIUM_BENEFITS } from '@/constants/Premium';
+import { PLAN_LIMITS } from '@/services/subscriptionPlan';
 
 export default function LandingPage() {
     const router = useRouter();
+    const colorScheme = useColorScheme();
     const [activeAppSlide, setActiveAppSlide] = useState(0);
+    const isDark = colorScheme === 'dark';
+    const freeLinkedFriendsLimit = PLAN_LIMITS.free.linkedFriends.toString();
+    const freeActiveRecordsLimit = PLAN_LIMITS.free.activeRecords.toString();
+    const darkSlideAccents = ['#CBD5E1', '#94A3B8', '#64748B', '#475569'] as const;
 
     const APP_SLIDES = [
         {
@@ -53,24 +61,25 @@ export default function LandingPage() {
                 title="A simple way to keep shared records and reminders with friends."
                 description="Buddy Balance helps friends keep track of shared activity, returns, reminders, and account history in one place. It does not send money, connect bank accounts, or move funds."
                 primaryAction={{ href: 'https://apps.apple.com/' as Href, label: 'Download BuddyBalance' }}
-                ctaSupportText="Track shared balances with friends and family in seconds."
                 secondaryActions={[
-                    { href: 'https://apps.apple.com/' as Href, label: 'App Store', variant: 'secondary' },
-                    { href: 'https://play.google.com/store' as Href, label: 'Google Play', variant: 'secondary' },
+                    { href: 'https://apps.apple.com/' as Href, label: 'App Store', variant: 'secondary', icon: 'app-store' },
+                    { href: 'https://play.google.com/store' as Href, label: 'Google Play', variant: 'secondary', icon: 'google-play' },
                 ]}
                 heroVisual={<AppShowcase />}
             >
-                <View style={styles.webRibbon}>
-                    <Text style={styles.webRibbonText}>
+                <View style={[styles.webRibbon, isDark && styles.webRibbonDark]}>
+                    <Text style={[styles.webRibbonText, isDark && styles.webRibbonTextDark]}>
                         SHARED RECORDS . FRIEND CONNECTIONS . CLEAR UPDATES . SIMPLE REMINDERS
                     </Text>
                 </View>
 
-                <View style={styles.webNoticeCard}>
-                    <Text style={styles.webNoticeEyebrow}>IMPORTANT</Text>
-                    <Text style={styles.webNoticeTitle}>Buddy Balance does not handle real money.</Text>
-                    <Text style={styles.webNoticeStrongLine}>Not a payment processor. No bank connection. No money movement.</Text>
-                    <Text style={styles.webNoticeBody}>
+                <View style={[styles.webNoticeCard, isDark && styles.webNoticeCardDark]}>
+                    <Text style={[styles.webNoticeEyebrow, isDark && styles.webNoticeEyebrowDark]}>IMPORTANT</Text>
+                    <Text style={[styles.webNoticeTitle, isDark && styles.webNoticeTitleDark]}>Buddy Balance does not handle real money.</Text>
+                    <Text style={[styles.webNoticeStrongLine, isDark && styles.webNoticeStrongLineDark]}>
+                        Not a payment processor. No bank connection. No money movement.
+                    </Text>
+                    <Text style={[styles.webNoticeBody, isDark && styles.webNoticeBodyDark]}>
                         It does not send funds and does not connect to bank accounts. It helps friends keep a shared
                         record of things that already happened outside the app.
                     </Text>
@@ -84,21 +93,24 @@ export default function LandingPage() {
                     >
                         {APP_SLIDES.map((slide, index) => {
                             const active = index === activeAppSlide;
+                            const accentColor = isDark ? darkSlideAccents[index % darkSlideAccents.length] : slide.accent;
                             return (
                                 <Pressable
                                     key={slide.title}
                                     onPress={() => setActiveAppSlide(index)}
                                     style={[
                                         styles.carouselCard,
+                                        isDark && styles.carouselCardDark,
                                         active && styles.carouselCardActive,
+                                        active && isDark && styles.carouselCardActiveDark,
                                     ]}
                                 >
-                                    <View style={[styles.carouselBadge, { backgroundColor: slide.accent }]} />
-                                    <Text style={styles.carouselTitle}>{slide.title}</Text>
-                                    <Text style={styles.carouselSubtitle}>{slide.subtitle}</Text>
+                                    <View style={[styles.carouselBadge, { backgroundColor: accentColor }]} />
+                                    <Text style={[styles.carouselTitle, isDark && styles.carouselTitleDark]}>{slide.title}</Text>
+                                    <Text style={[styles.carouselSubtitle, isDark && styles.carouselSubtitleDark]}>{slide.subtitle}</Text>
                                     <View style={styles.carouselList}>
                                         {slide.lines.map((line) => (
-                                            <Text key={line} style={styles.carouselLine}>{line}</Text>
+                                            <Text key={line} style={[styles.carouselLine, isDark && styles.carouselLineDark]}>{line}</Text>
                                         ))}
                                     </View>
                                 </Pressable>
@@ -113,13 +125,34 @@ export default function LandingPage() {
                         description="Buddy Balance is designed to make shared activity easy to understand: who updated something, what changed, what still needs attention, and how much money is still owed between friends or family."
                     >
                         <View style={styles.signalGrid}>
-                            <SignalChip label="Shared history stays readable" />
-                            <SignalChip label="Track money owed to friends or family" />
-                            <SignalChip label="Contacts are easy to manage" />
-                            <SignalChip label="Updates stay in context" />
-                            <SignalChip label="Reminders are easy to follow" />
-                            <SignalChip label="Settings stay organized" />
-                            <SignalChip label="No bank connection required" />
+                            <SignalChip label="Shared history stays readable" isDark={isDark} />
+                            <SignalChip label="Track money owed to friends or family" isDark={isDark} />
+                            <SignalChip label="Contacts are easy to manage" isDark={isDark} />
+                            <SignalChip label="Updates stay in context" isDark={isDark} />
+                            <SignalChip label="Reminders are easy to follow" isDark={isDark} />
+                            <SignalChip label="Settings stay organized" isDark={isDark} />
+                            <SignalChip label="No bank connection required" isDark={isDark} />
+                        </View>
+                    </PublicCard>
+
+                    <PublicCard
+                        title="What Premium adds"
+                        description="Premium is built for people who need deeper history, better follow-up tools, and fewer limits as shared activity grows."
+                    >
+                        <View style={styles.signalGrid}>
+                            {PREMIUM_BENEFITS.map((benefit) => (
+                                <SignalChip key={benefit} label={benefit} isDark={isDark} />
+                            ))}
+                        </View>
+
+                        <View style={[styles.planCapsCard, isDark && styles.planCapsCardDark]}>
+                            <Text style={[styles.planCapsTitle, isDark && styles.planCapsTitleDark]}>
+                                Free plan caps stay simple
+                            </Text>
+                            <Text style={[styles.planCapsBody, isDark && styles.planCapsBodyDark]}>
+                                Free includes up to {freeLinkedFriendsLimit} linked friends and {freeActiveRecordsLimit} active records.
+                                Premium removes both caps so shared history can keep growing.
+                            </Text>
                         </View>
                     </PublicCard>
                 </View>
@@ -149,11 +182,11 @@ export default function LandingPage() {
                         style={styles.featuresContainer}
                     >
                         <FeatureItem
-                            icon={<ShieldCheck size={22} color="#1D4ED8" />}
+                            icon={<ShieldCheck size={22} color={isDark ? '#CBD5E1' : '#1D4ED8'} />}
                             text="Secure & Reliable"
                         />
                         <FeatureItem
-                            icon={<Zap size={22} color="#0284C7" />}
+                            icon={<Zap size={22} color={isDark ? '#94A3B8' : '#0284C7'} />}
                             text="Real-time Management"
                         />
                     </Animated.View>
@@ -165,6 +198,7 @@ export default function LandingPage() {
                         <Pressable
                             style={({ pressed }) => [
                                 styles.button,
+                                isDark && styles.buttonDark,
                                 pressed && { transform: [{ scale: 0.98 }] }
                             ]}
                             onPress={() => router.push('/(auth)/login')}
@@ -199,10 +233,10 @@ function FeatureItem({ icon, text }: { icon: React.ReactNode, text: string }) {
     );
 }
 
-function SignalChip({ label }: { label: string }) {
+function SignalChip({ label, isDark }: { label: string; isDark?: boolean }) {
     return (
-        <View style={styles.signalChipPill}>
-            <Text style={styles.signalChipLabel}>{label}</Text>
+        <View style={[styles.signalChipPill, isDark && styles.signalChipPillDark]}>
+            <Text style={[styles.signalChipLabel, isDark && styles.signalChipLabelDark]}>{label}</Text>
         </View>
     );
 }
@@ -286,6 +320,10 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 10,
     },
+    buttonDark: {
+        backgroundColor: '#334155',
+        shadowColor: '#020617',
+    },
     buttonText: {
         color: '#FFFFFF',
         fontSize: 18,
@@ -306,11 +344,19 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(15,23,42,0.9)',
         alignSelf: 'flex-start',
     },
+    webRibbonDark: {
+        backgroundColor: 'rgba(15,23,42,0.92)',
+        borderWidth: 1,
+        borderColor: '#334155',
+    },
     webRibbonText: {
         color: '#DDE4FF',
         fontFamily: 'SpaceMono',
         fontSize: 11,
         letterSpacing: 1.4,
+    },
+    webRibbonTextDark: {
+        color: '#E2E8F0',
     },
     webNoticeCard: {
         padding: 22,
@@ -324,11 +370,19 @@ const styles = StyleSheet.create({
         shadowRadius: 24,
         elevation: 6,
     },
+    webNoticeCardDark: {
+        backgroundColor: 'rgba(15,23,42,0.88)',
+        borderColor: '#334155',
+        shadowColor: '#020617',
+    },
     webNoticeEyebrow: {
         color: '#4F46E5',
         fontFamily: 'SpaceMono',
         fontSize: 11,
         letterSpacing: 1.6,
+    },
+    webNoticeEyebrowDark: {
+        color: '#CBD5E1',
     },
     webNoticeTitle: {
         marginTop: 10,
@@ -338,12 +392,18 @@ const styles = StyleSheet.create({
         color: '#111827',
         maxWidth: 720,
     },
+    webNoticeTitleDark: {
+        color: '#F8FAFC',
+    },
     webNoticeBody: {
         marginTop: 10,
         fontSize: 16,
         lineHeight: 26,
         color: '#475569',
         maxWidth: 840,
+    },
+    webNoticeBodyDark: {
+        color: '#CBD5E1',
     },
     webNoticeStrongLine: {
         marginTop: 10,
@@ -352,6 +412,9 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: '#1E1B4B',
         maxWidth: 840,
+    },
+    webNoticeStrongLineDark: {
+        color: '#E2E8F0',
     },
     webMagazineGrid: {
         flexDirection: 'row',
@@ -407,10 +470,20 @@ const styles = StyleSheet.create({
         elevation: 6,
         transform: [{ scale: 0.96 }],
     },
+    carouselCardDark: {
+        backgroundColor: '#0F172A',
+        borderColor: '#334155',
+        shadowColor: '#020617',
+    },
     carouselCardActive: {
         width: 280,
         borderColor: '#6366F1',
         transform: [{ scale: 1 }],
+    },
+    carouselCardActiveDark: {
+        backgroundColor: '#111827',
+        borderColor: '#475569',
+        shadowColor: '#020617',
     },
     carouselBadge: {
         width: 48,
@@ -423,11 +496,17 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: '#0F172A',
     },
+    carouselTitleDark: {
+        color: '#F8FAFC',
+    },
     carouselSubtitle: {
         marginTop: 6,
         fontSize: 13,
         lineHeight: 20,
         color: '#475569',
+    },
+    carouselSubtitleDark: {
+        color: '#CBD5E1',
     },
     carouselList: {
         marginTop: 14,
@@ -437,6 +516,9 @@ const styles = StyleSheet.create({
         fontSize: 12,
         lineHeight: 18,
         color: '#64748B',
+    },
+    carouselLineDark: {
+        color: '#94A3B8',
     },
     webHighlights: {
         gap: 16,
@@ -469,16 +551,51 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: 10,
     },
+    planCapsCard: {
+        marginTop: 18,
+        padding: 18,
+        borderRadius: 22,
+        backgroundColor: '#F8FAFC',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    planCapsCardDark: {
+        backgroundColor: '#0F172A',
+        borderColor: '#334155',
+    },
+    planCapsTitle: {
+        color: '#0F172A',
+        fontSize: 15,
+        fontWeight: '900',
+    },
+    planCapsTitleDark: {
+        color: '#F8FAFC',
+    },
+    planCapsBody: {
+        marginTop: 8,
+        color: '#475569',
+        fontSize: 14,
+        lineHeight: 22,
+    },
+    planCapsBodyDark: {
+        color: '#CBD5E1',
+    },
     signalChipPill: {
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 999,
         backgroundColor: '#EEF2FF',
     },
+    signalChipPillDark: {
+        backgroundColor: '#1E293B',
+    },
     signalChipLabel: {
         color: '#4F46E5',
         fontSize: 12,
         fontWeight: '800',
+    },
+    signalChipLabelDark: {
+        color: '#CBD5E1',
     },
     webSpread: {
         flexDirection: 'row',

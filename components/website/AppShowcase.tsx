@@ -1,14 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, Check, CirclePlus, Clock3, Crown, Send, Shield, UserRoundPlus, X } from 'lucide-react-native';
 
 import { BrandLogo } from '@/components/BrandLogo';
 import { Text } from '@/components/Themed';
+import { useColorScheme } from '@/components/useColorScheme';
 
 type AppShowcaseProps = {
   compact?: boolean;
 };
+
+type PhoneVariant = 'home' | 'contacts' | 'premium' | 'requests';
+
+type PhoneHotspot = {
+  id: string;
+  left: number;
+  top: number;
+  title: string;
+  copy: string;
+  align?: 'left' | 'right';
+};
+
+const PHONE_FRAME_WIDTH = 255;
+const PHONE_FRAME_HEIGHT = 522;
 
 const INSIDE_APP_PREVIEWS: Array<{
   eyebrow: string;
@@ -41,6 +56,105 @@ const INSIDE_APP_PREVIEWS: Array<{
     variant: 'premium',
   },
 ];
+
+const PHONE_PREVIEW_HOTSPOTS: Record<PhoneVariant, PhoneHotspot[]> = {
+  home: [
+    {
+      id: 'add-friend',
+      left: 126,
+      top: 114,
+      title: 'Invite friends fast',
+      copy: 'Start a shared history with friend codes, email, or text from the main action area.',
+      align: 'left',
+    },
+    {
+      id: 'balance',
+      left: 192,
+      top: 176,
+      title: 'See the net balance',
+      copy: 'Open Balance summarizes who is ahead overall before you open individual records.',
+      align: 'right',
+    },
+    {
+      id: 'queue',
+      left: 196,
+      top: 340,
+      title: 'Spot what changed',
+      copy: 'Quick stats highlight shared records and upcoming activity without digging through menus.',
+      align: 'right',
+    },
+  ],
+  contacts: [
+    {
+      id: 'search',
+      left: 124,
+      top: 98,
+      title: 'Search by person or code',
+      copy: 'Find someone by name or jump straight to a linked account using the friend code search.',
+      align: 'left',
+    },
+    {
+      id: 'reminder',
+      left: 196,
+      top: 176,
+      title: 'See reminder context',
+      copy: 'Each contact card shows what needs attention next, including reminders and recent changes.',
+      align: 'right',
+    },
+    {
+      id: 'linked-account',
+      left: 196,
+      top: 250,
+      title: 'Know when accounts are linked',
+      copy: 'Linked friends share timeline context so both sides can understand updates faster.',
+      align: 'right',
+    },
+  ],
+  premium: [
+    {
+      id: 'tools',
+      left: 192,
+      top: 132,
+      title: 'Keep account tools together',
+      copy: 'Exports, notifications, and security stay grouped in one place instead of scattered across the app.',
+      align: 'right',
+    },
+    {
+      id: 'security',
+      left: 54,
+      top: 234,
+      title: 'Protect access',
+      copy: 'Security controls cover biometric lock and recovery-related account protection.',
+      align: 'left',
+    },
+    {
+      id: 'exports',
+      left: 54,
+      top: 320,
+      title: 'Export history on demand',
+      copy: 'Unlimited CSV exports make it easier to review balances, payments, and account activity outside the app.',
+      align: 'left',
+    },
+  ],
+  requests: [
+    {
+      id: 'pending-work',
+      left: 188,
+      top: 124,
+      title: 'Separate pending approvals',
+      copy: 'Requests stay in their own queue so important confirmations do not get buried in regular events.',
+      align: 'right',
+    },
+    {
+      id: 'approve',
+      left: 76,
+      top: 378,
+      title: 'Resolve updates quickly',
+      copy: 'Approve or decline shared changes from the request card without opening a second screen.',
+      align: 'left',
+    },
+  ],
+};
 
 export function AppShowcase({ compact = false }: AppShowcaseProps) {
   const { width } = useWindowDimensions();
@@ -200,6 +314,7 @@ export function AppShowcase({ compact = false }: AppShowcaseProps) {
 
 export function InsideAppGallery() {
   const { width } = useWindowDimensions();
+  const colorScheme = useColorScheme();
   const previewGap = 18;
   const cardsPerView = Math.min(
     INSIDE_APP_PREVIEWS.length,
@@ -211,6 +326,7 @@ export function InsideAppGallery() {
   const currentPreviewRef = useRef(0);
   const transitionInFlightRef = useRef(false);
   const trackTranslate = useRef(new Animated.Value(0)).current;
+  const isDark = colorScheme === 'dark';
   const cardWidth =
     shouldRotate && viewportWidth > 0
       ? (viewportWidth - previewGap * (cardsPerView - 1)) / cardsPerView
@@ -279,6 +395,11 @@ export function InsideAppGallery() {
 
   return (
     <View style={styles.previewCarousel}>
+      {Platform.OS === 'web' ? (
+        <Text style={[styles.previewHint, isDark && styles.previewHintDark]}>
+          Hover the info dots on each screen to see what that area does.
+        </Text>
+      ) : null}
       <View style={styles.previewViewport} onLayout={handleViewportLayout}>
         <Animated.View
           style={[
@@ -292,9 +413,10 @@ export function InsideAppGallery() {
           {visiblePreviews.map((preview) => (
             <LinearGradient
               key={`${preview.title}-${currentPreview}`}
-              colors={['rgba(255,255,255,0.96)', 'rgba(241,245,249,0.96)']}
+              colors={isDark ? ['rgba(15,23,42,0.96)', 'rgba(17,24,39,0.94)'] : ['rgba(255,255,255,0.96)', 'rgba(241,245,249,0.96)']}
               style={[
                 styles.previewCard,
+                isDark && styles.previewCardDark,
                 shouldRotate && cardWidth > 0
                   ? {
                       width: cardWidth,
@@ -306,12 +428,12 @@ export function InsideAppGallery() {
               ]}
             >
               <View style={styles.previewPhoneWrap}>
-                <PhoneFrame variant={preview.variant} />
+                <InteractivePhoneFrame variant={preview.variant} />
               </View>
               <View style={styles.previewCopy}>
-                <Text style={styles.previewEyebrow}>{preview.eyebrow}</Text>
-                <Text style={styles.previewTitle}>{preview.title}</Text>
-                <Text style={styles.previewText}>{preview.copy}</Text>
+                <Text style={[styles.previewEyebrow, isDark && styles.previewEyebrowDark]}>{preview.eyebrow}</Text>
+                <Text style={[styles.previewTitle, isDark && styles.previewTitleDark]}>{preview.title}</Text>
+                <Text style={[styles.previewText, isDark && styles.previewTextDark]}>{preview.copy}</Text>
               </View>
             </LinearGradient>
           ))}
@@ -326,9 +448,23 @@ export function InsideAppGallery() {
               <Pressable
                 key={item.title}
                 onPress={() => handleSelectPreview(index)}
-                style={[styles.previewDot, active && styles.previewDotActive]}
+                style={[
+                  styles.previewDot,
+                  isDark && styles.previewDotDark,
+                  active && styles.previewDotActive,
+                  active && isDark && styles.previewDotActiveDark,
+                ]}
               >
-                <Text style={[styles.previewDotLabel, active && styles.previewDotLabelActive]}>{item.eyebrow}</Text>
+                <Text
+                  style={[
+                    styles.previewDotLabel,
+                    isDark && styles.previewDotLabelDark,
+                    active && styles.previewDotLabelActive,
+                    active && isDark && styles.previewDotLabelActiveDark,
+                  ]}
+                >
+                  {item.eyebrow}
+                </Text>
               </Pressable>
             );
           })}
@@ -338,11 +474,62 @@ export function InsideAppGallery() {
   );
 }
 
-type PhoneVariant = 'home' | 'contacts' | 'premium' | 'requests';
+function InteractivePhoneFrame({ variant }: { variant: PhoneVariant }) {
+  const colorScheme = useColorScheme();
+  const [activeHotspotId, setActiveHotspotId] = useState<string | null>(null);
+  const isDark = colorScheme === 'dark';
+  const hotspots = PHONE_PREVIEW_HOTSPOTS[variant] || [];
+
+  return (
+    <View style={styles.phoneInteractiveWrap}>
+      <PhoneFrame variant={variant} />
+      {hotspots.map((hotspot) => {
+        const active = activeHotspotId === hotspot.id;
+
+        return (
+          <Pressable
+            key={hotspot.id}
+            onHoverIn={() => setActiveHotspotId(hotspot.id)}
+            onHoverOut={() => setActiveHotspotId((current) => (current === hotspot.id ? null : current))}
+            onPress={() => setActiveHotspotId((current) => (current === hotspot.id ? null : hotspot.id))}
+            style={[
+              styles.hotspotAnchor,
+              {
+                left: hotspot.left,
+                top: hotspot.top,
+              },
+            ]}
+          >
+            <View style={[styles.hotspotButton, isDark && styles.hotspotButtonDark, active && styles.hotspotButtonActive]}>
+              <View style={[styles.hotspotPulse, isDark && styles.hotspotPulseDark]} />
+              <View style={[styles.hotspotCore, isDark && styles.hotspotCoreDark]} />
+            </View>
+
+            {active ? (
+              <View
+                style={[
+                  styles.hotspotTooltip,
+                  hotspot.align === 'right' ? styles.hotspotTooltipRight : styles.hotspotTooltipLeft,
+                  isDark && styles.hotspotTooltipDark,
+                ]}
+              >
+                <Text style={[styles.hotspotTooltipTitle, isDark && styles.hotspotTooltipTitleDark]}>{hotspot.title}</Text>
+                <Text style={[styles.hotspotTooltipCopy, isDark && styles.hotspotTooltipCopyDark]}>{hotspot.copy}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function PhoneFrame({ variant }: { variant: PhoneVariant }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   return (
-    <LinearGradient colors={['#202447', '#090E23']} style={styles.phoneShell}>
+    <LinearGradient colors={isDark ? ['#111827', '#020617'] : ['#202447', '#090E23']} style={styles.phoneShell}>
       <View style={styles.phoneNotch} />
       <View style={styles.phoneScreen}>
         {variant === 'home' ? <HomeScreen /> : null}
@@ -371,15 +558,19 @@ function ScreenHeader({ title, pill }: { title: string; pill?: string }) {
 }
 
 function HomeScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const neutralAccent = isDark ? '#475569' : '#5B63FF';
+
   return (
     <View style={styles.screenBody}>
       <ScreenHeader title="Home" pill="PREMIUM" />
       <Text style={styles.heroName}>Hi, Joe!</Text>
       <Text style={styles.heroSubline}>Focus on what needs attention first.</Text>
 
-      <View style={styles.inlineAction}>
-        <UserRoundPlus size={14} color="#5B63FF" />
-        <Text style={styles.inlineActionText}>Add friend</Text>
+      <View style={[styles.inlineAction, isDark && styles.inlineActionDark]}>
+        <UserRoundPlus size={14} color={neutralAccent} />
+        <Text style={[styles.inlineActionText, isDark && styles.inlineActionTextDark]}>Add friend</Text>
       </View>
 
       <LinearGradient colors={['#CCFCE0', '#C5F0D6']} style={styles.balancePanel}>
@@ -407,12 +598,12 @@ function HomeScreen() {
       </LinearGradient>
 
       <View style={styles.queueRow}>
-        <QueueMiniCard label="Needs attention" value="0" />
-        <QueueMiniCard label="Next 7 days" value="0" />
-        <QueueMiniCard label="Shared records" value="11" highlight />
+        <QueueMiniCard label="Needs attention" value="0" isDark={isDark} />
+        <QueueMiniCard label="Next 7 days" value="0" isDark={isDark} />
+        <QueueMiniCard label="Shared records" value="11" highlight isDark={isDark} />
       </View>
 
-      <View style={styles.fab}>
+      <View style={[styles.fab, isDark && styles.fabDark]}>
         <CirclePlus size={28} color="#FFFFFF" />
       </View>
     </View>
@@ -450,6 +641,9 @@ function ContactsScreen() {
 }
 
 function PremiumScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   return (
     <View style={styles.screenBody}>
       <ScreenHeader title="Settings" pill="TOOLS" />
@@ -464,12 +658,12 @@ function PremiumScreen() {
       </LinearGradient>
 
       <SettingsRow
-        icon={<Shield size={16} color="#5B63FF" />}
+        icon={<Shield size={16} color={isDark ? '#475569' : '#5B63FF'} />}
         title="Security"
         subline="Biometric lock and account protection"
       />
       <SettingsRow
-        icon={<Bell size={16} color="#0EA5E9" />}
+        icon={<Bell size={16} color={isDark ? '#64748B' : '#0EA5E9'} />}
         title="Notifications"
         subline="Confirmation events and account activity"
       />
@@ -483,16 +677,19 @@ function PremiumScreen() {
 }
 
 function RequestsScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   return (
     <View style={styles.screenBody}>
       <ScreenHeader title="Requests" />
-      <View style={styles.requestsHero}>
+      <View style={[styles.requestsHero, isDark && styles.requestsHeroDark]}>
         <View>
-          <Text style={styles.requestsHeroTitle}>2 pending</Text>
-          <Text style={styles.requestsHeroText}>Shared confirmations that need your answer.</Text>
+          <Text style={[styles.requestsHeroTitle, isDark && styles.requestsHeroTitleDark]}>2 pending</Text>
+          <Text style={[styles.requestsHeroText, isDark && styles.requestsHeroTextDark]}>Shared confirmations that need your answer.</Text>
         </View>
-        <View style={styles.requestsHeroBadge}>
-          <Clock3 size={16} color="#7C3AED" />
+        <View style={[styles.requestsHeroBadge, isDark && styles.requestsHeroBadgeDark]}>
+          <Clock3 size={16} color={isDark ? '#475569' : '#7C3AED'} />
         </View>
       </View>
 
@@ -514,15 +711,17 @@ function QueueMiniCard({
   label,
   value,
   highlight = false,
+  isDark = false,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
+  isDark?: boolean;
 }) {
   return (
-    <View style={[styles.queueMiniCard, highlight && styles.queueMiniCardHighlight]}>
-      <Text style={[styles.queueMiniValue, highlight && styles.queueMiniValueHighlight]}>{value}</Text>
-      <Text style={[styles.queueMiniLabel, highlight && styles.queueMiniLabelHighlight]}>{label}</Text>
+    <View style={[styles.queueMiniCard, highlight && styles.queueMiniCardHighlight, highlight && isDark && styles.queueMiniCardHighlightDark]}>
+      <Text style={[styles.queueMiniValue, highlight && styles.queueMiniValueHighlight, highlight && isDark && styles.queueMiniValueHighlightDark]}>{value}</Text>
+      <Text style={[styles.queueMiniLabel, highlight && styles.queueMiniLabelHighlight, highlight && isDark && styles.queueMiniLabelHighlightDark]}>{label}</Text>
     </View>
   );
 }
@@ -559,9 +758,12 @@ function SettingsRow({
   title: string;
   subline: string;
 }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   return (
     <View style={styles.settingsRow}>
-      <View style={styles.settingsIcon}>{icon}</View>
+      <View style={[styles.settingsIcon, isDark && styles.settingsIconDark]}>{icon}</View>
       <View style={styles.settingsCopy}>
         <Text style={styles.settingsTitle}>{title}</Text>
         <Text style={styles.settingsSubline}>{subline}</Text>
@@ -579,15 +781,18 @@ function RequestCard({
   detail: string;
   note: string;
 }) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   return (
     <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
-        <View style={styles.requestAvatar}>
-          <Send size={14} color="#4F46E5" />
+        <View style={[styles.requestAvatar, isDark && styles.requestAvatarDark]}>
+          <Send size={14} color={isDark ? '#475569' : '#4F46E5'} />
         </View>
         <View style={styles.requestCopy}>
           <Text style={styles.requestName}>{name}</Text>
-          <Text style={styles.requestDetail}>{detail}</Text>
+          <Text style={[styles.requestDetail, isDark && styles.requestDetailDark]}>{detail}</Text>
         </View>
       </View>
       <Text style={styles.requestNote}>{note}</Text>
@@ -691,6 +896,14 @@ const styles = StyleSheet.create({
   previewCarousel: {
     gap: 16,
   },
+  previewHint: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  previewHintDark: {
+    color: '#94A3B8',
+  },
   previewViewport: {
     overflow: 'hidden',
     borderRadius: 30,
@@ -715,6 +928,10 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 8,
   },
+  previewCardDark: {
+    borderColor: '#334155',
+    shadowColor: '#020617',
+  },
   previewPhoneWrap: {
     alignItems: 'center',
   },
@@ -729,16 +946,25 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
+  previewEyebrowDark: {
+    color: '#CBD5E1',
+  },
   previewTitle: {
     color: '#0F172A',
     fontSize: 21,
     lineHeight: 26,
     fontWeight: '900',
   },
+  previewTitleDark: {
+    color: '#F8FAFC',
+  },
   previewText: {
     color: '#475569',
     fontSize: 13,
     lineHeight: 20,
+  },
+  previewTextDark: {
+    color: '#CBD5E1',
   },
   previewDots: {
     flexDirection: 'row',
@@ -751,20 +977,32 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#E2E8F0',
   },
+  previewDotDark: {
+    backgroundColor: '#1E293B',
+  },
   previewDotActive: {
     backgroundColor: '#5B63FF',
+  },
+  previewDotActiveDark: {
+    backgroundColor: '#334155',
   },
   previewDotLabel: {
     color: '#475569',
     fontSize: 12,
     fontWeight: '800',
   },
+  previewDotLabelDark: {
+    color: '#CBD5E1',
+  },
   previewDotLabelActive: {
     color: '#FFFFFF',
   },
+  previewDotLabelActiveDark: {
+    color: '#F8FAFC',
+  },
   phoneShell: {
-    width: 255,
-    height: 522,
+    width: PHONE_FRAME_WIDTH,
+    height: PHONE_FRAME_HEIGHT,
     borderRadius: 38,
     paddingHorizontal: 10,
     paddingTop: 14,
@@ -774,6 +1012,97 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 32,
     elevation: 16,
+  },
+  phoneInteractiveWrap: {
+    width: PHONE_FRAME_WIDTH,
+    height: PHONE_FRAME_HEIGHT,
+  },
+  hotspotAnchor: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    marginLeft: -12,
+    marginTop: -12,
+  },
+  hotspotButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15,23,42,0.12)',
+  },
+  hotspotButtonDark: {
+    backgroundColor: 'rgba(226,232,240,0.12)',
+  },
+  hotspotButtonActive: {
+    transform: [{ scale: 1.08 }],
+  },
+  hotspotPulse: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: 'rgba(91,99,255,0.18)',
+  },
+  hotspotPulseDark: {
+    backgroundColor: 'rgba(148,163,184,0.22)',
+  },
+  hotspotCore: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#5B63FF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  hotspotCoreDark: {
+    backgroundColor: '#64748B',
+    borderColor: '#E2E8F0',
+  },
+  hotspotTooltip: {
+    position: 'absolute',
+    top: -6,
+    minWidth: 170,
+    maxWidth: 190,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderWidth: 1,
+    borderColor: '#D6DAFF',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  hotspotTooltipLeft: {
+    left: 30,
+  },
+  hotspotTooltipRight: {
+    right: 30,
+  },
+  hotspotTooltipDark: {
+    backgroundColor: 'rgba(15,23,42,0.98)',
+    borderColor: '#334155',
+  },
+  hotspotTooltipTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  hotspotTooltipTitleDark: {
+    color: '#F8FAFC',
+  },
+  hotspotTooltipCopy: {
+    marginTop: 6,
+    color: '#475569',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  hotspotTooltipCopyDark: {
+    color: '#CBD5E1',
   },
   phoneNotch: {
     alignSelf: 'center',
@@ -821,7 +1150,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   screenPillLabel: {
-    color: '#A16207',
+    color: '#854D0E',
     fontFamily: 'SpaceMono',
     fontSize: 10,
   },
@@ -849,10 +1178,17 @@ const styles = StyleSheet.create({
     borderColor: '#D9DFFF',
     backgroundColor: '#F4F6FF',
   },
+  inlineActionDark: {
+    borderColor: '#CBD5E1',
+    backgroundColor: '#E2E8F0',
+  },
   inlineActionText: {
     color: '#5B63FF',
     fontSize: 12,
     fontWeight: '800',
+  },
+  inlineActionTextDark: {
+    color: '#334155',
   },
   balancePanel: {
     marginTop: 16,
@@ -935,6 +1271,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     borderColor: '#C7D2FE',
   },
+  queueMiniCardHighlightDark: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
+  },
   queueMiniValue: {
     color: '#0F172A',
     fontSize: 20,
@@ -942,6 +1282,9 @@ const styles = StyleSheet.create({
   },
   queueMiniValueHighlight: {
     color: '#4F46E5',
+  },
+  queueMiniValueHighlightDark: {
+    color: '#334155',
   },
   queueMiniLabel: {
     marginTop: 8,
@@ -951,6 +1294,9 @@ const styles = StyleSheet.create({
   },
   queueMiniLabelHighlight: {
     color: '#4F46E5',
+  },
+  queueMiniLabelHighlightDark: {
+    color: '#475569',
   },
   fab: {
     position: 'absolute',
@@ -968,6 +1314,10 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 10,
   },
+  fabDark: {
+    backgroundColor: '#475569',
+    shadowColor: '#334155',
+  },
   searchBar: {
     height: 44,
     borderRadius: 16,
@@ -979,7 +1329,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   searchBarText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 13,
   },
   contactCard: {
@@ -1013,7 +1363,7 @@ const styles = StyleSheet.create({
   },
   contactDetail: {
     marginTop: 6,
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 10,
   },
   premiumHero: {
@@ -1040,7 +1390,7 @@ const styles = StyleSheet.create({
   },
   premiumText: {
     marginTop: 10,
-    color: '#8A6A18',
+    color: '#6B4F12',
     fontSize: 11,
     lineHeight: 16,
   },
@@ -1056,17 +1406,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  requestsHeroDark: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
+  },
   requestsHeroTitle: {
     color: '#312E81',
     fontSize: 24,
     lineHeight: 26,
     fontWeight: '900',
   },
+  requestsHeroTitleDark: {
+    color: '#334155',
+  },
   requestsHeroText: {
     marginTop: 8,
     color: '#4C1D95',
     fontSize: 11,
     lineHeight: 16,
+  },
+  requestsHeroTextDark: {
+    color: '#475569',
   },
   requestsHeroBadge: {
     width: 38,
@@ -1075,6 +1435,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
+  },
+  requestsHeroBadgeDark: {
+    backgroundColor: '#F8FAFC',
   },
   requestCard: {
     padding: 14,
@@ -1097,6 +1460,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#EEF2FF',
   },
+  requestAvatarDark: {
+    backgroundColor: '#E2E8F0',
+  },
   requestCopy: {
     flex: 1,
   },
@@ -1110,6 +1476,9 @@ const styles = StyleSheet.create({
     color: '#6366F1',
     fontSize: 11,
     fontWeight: '700',
+  },
+  requestDetailDark: {
+    color: '#475569',
   },
   requestNote: {
     marginTop: 10,
@@ -1165,6 +1534,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  settingsIconDark: {
+    backgroundColor: '#E2E8F0',
   },
   settingsCopy: {
     flex: 1,

@@ -7,17 +7,20 @@ if (__DEV__) {
 }
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SystemUI from 'expo-system-ui';
 
 import { ReferralRewardModal } from '@/components/ReferralRewardModal';
 import { AppBiometricGate } from '@/components/AppBiometricGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useColorScheme } from '@/components/useColorScheme';
+import { useThemeStore } from '@/store/themeStore';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -52,11 +55,49 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const hydrateThemePreference = useThemeStore((state) => state.hydrateThemePreference);
   useAuth(); // Handle redirects based on auth state
+  const navigationTheme = colorScheme === 'dark'
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          primary: '#CBD5E1',
+          background: '#020617',
+          card: '#0F172A',
+          border: '#334155',
+          text: '#F1F5F9',
+          notification: '#CBD5E1',
+        },
+      }
+    : DefaultTheme;
+
+  useEffect(() => {
+    void hydrateThemePreference();
+  }, [hydrateThemePreference]);
+
+  useEffect(() => {
+    const backgroundColor = colorScheme === 'dark' ? '#020617' : '#F8F5FF';
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', colorScheme);
+      document.body.style.backgroundColor = backgroundColor;
+      document.body.style.color = colorScheme === 'dark' ? '#F8FAFC' : '#0F172A';
+
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (themeColorMeta) {
+        themeColorMeta.setAttribute('content', colorScheme === 'dark' ? '#0F172A' : '#6366F1');
+      }
+      return;
+    }
+
+    void SystemUI.setBackgroundColorAsync(backgroundColor).catch(() => null);
+  }, [colorScheme]);
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={navigationTheme}>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         <Stack
           screenOptions={{
             headerTransparent: true,
