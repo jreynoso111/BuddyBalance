@@ -79,6 +79,16 @@ const customStorage = {
 };
 
 export async function clearPersistedAuthState() {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        authStorageKeys.forEach((key) => {
+            try {
+                localStorage.removeItem(key);
+            } catch {
+                // Ignore local storage cleanup failures and continue clearing other stores.
+            }
+        });
+    }
+
     await Promise.all(
         authStorageKeys.flatMap((key) => [
             AsyncStorage.removeItem(key).catch(() => null),

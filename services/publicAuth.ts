@@ -1,6 +1,16 @@
+import { Session } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/services/supabase';
+
+type PublicAuthSignInResponse = {
+  ok: true;
+  action: 'sign_in_with_password';
+  session: {
+    access_token: string;
+    refresh_token: string;
+  };
+};
 
 export async function sendPublicRegistrationCode(options: {
   email: string;
@@ -68,4 +78,53 @@ export async function sendPublicPasswordReset(options: {
   if (error) {
     throw new Error(error.message || 'Could not send the recovery email.');
   }
+}
+
+export async function signInWithPublicPassword(options: {
+  email: string;
+  password: string;
+  turnstileToken?: string | null;
+}): Promise<Session | null> {
+  if (Platform.OS !== 'web') {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: options.email,
+      password: options.password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data.session ?? null;
+  }
+
+  const { data, error } = await supabase.functions.invoke<PublicAuthSignInResponse>('public-auth', {
+    body: {
+      action: 'sign_in_with_password',
+      email: options.email,
+      password: options.password,
+      turnstileToken: options.turnstileToken,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Could not sign in right now.');
+  }
+
+  const accessToken = data?.session?.access_token || '';
+  const refreshToken = data?.session?.refresh_token || '';
+  if (!accessToken || !refreshToken) {
+    throw new Error('Could not establish your session. Please try again.');
+  }
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+
+  if (sessionError) {
+    throw new Error(sessionError.message);
+  }
+
+  return sessionData.session ?? null;
 }

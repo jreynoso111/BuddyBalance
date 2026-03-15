@@ -3,18 +3,18 @@ import { StyleSheet, TouchableOpacity, Alert, View as RNView, ScrollView, Image,
 import { Redirect } from 'expo-router';
 import { Text, View, Screen, Card } from '@/components/Themed';
 import { ThemePreferencePicker } from '@/components/ThemeControls';
-import { clearPersistedAuthState, supabase } from '@/services/supabase';
+import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { LogOut, User, Bell, Shield, CircleHelp, FileOutput, ChevronRight, Sparkles } from 'lucide-react-native';
 import { exportLoansToCSV } from '@/services/exportService';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { DEFAULT_USER_PREFERENCES, getOrCreateUserPreferences } from '@/services/userPreferences';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     PREMIUM_BENEFITS_SENTENCE,
     PREMIUM_BENEFITS_SHORT,
     PREMIUM_EXPORT_LOCK_MESSAGE,
 } from '@/constants/Premium';
+import { redirectAfterSignOut, signOutAndResetAuthState } from '@/services/authState';
 import { getProfileAvatarPublicUrl, isMissingAvatarUrlColumn } from '@/services/profileAvatar';
 import { getPlanLabel, normalizePlanTier } from '@/services/subscriptionPlan';
 import { getDeviceLanguage, normalizeLanguage, SUPPORTED_LANGUAGES, type AppLanguage } from '@/constants/i18n';
@@ -22,13 +22,12 @@ import { CURRENCIES } from '@/constants/Currencies';
 import { updateMyProfileDefaults } from '@/services/profileService';
 import { WebAccountLayout } from '@/components/website/WebAccountLayout';
 
-const LAST_PROTECTED_PATH_KEY = 'last_protected_path';
 const isMissingDefaultLanguageColumn = (message?: string) =>
     String(message || '').toLowerCase().includes('default_language');
 
 export default function SettingsScreen() {
     const { width } = useWindowDimensions();
-    const { user, role, planTier, initialized, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
+    const { user, role, planTier, initialized, setPlanTier, setLanguage } = useAuthStore();
     const router = useRouter();
     const [prefs, setPrefs] = React.useState(DEFAULT_USER_PREFERENCES);
     const [profileName, setProfileName] = React.useState('');
@@ -124,33 +123,14 @@ export default function SettingsScreen() {
         setSigningOut(true);
 
         try {
-            await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
-
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                console.warn('remote sign out failed:', error.message);
+            await signOutAndResetAuthState();
+            if (Platform.OS === 'web') {
+                redirectAfterSignOut('/');
+                return;
             }
-
-            await clearPersistedAuthState();
-
-            setSession(null);
-            setUser(null);
-            setRole(null);
-            setPlanTier('free');
-            setLanguage(getDeviceLanguage());
             router.replace('/');
         } catch (error: any) {
-            try {
-                await clearPersistedAuthState();
-                setSession(null);
-                setUser(null);
-                setRole(null);
-                setPlanTier('free');
-                setLanguage(getDeviceLanguage());
-                router.replace('/');
-            } catch {
-                Alert.alert('Error', error?.message || 'Could not sign out right now.');
-            }
+            Alert.alert('Error', error?.message || 'Could not sign out right now.');
         } finally {
             setSigningOut(false);
         }

@@ -1,26 +1,33 @@
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, View as RNView } from 'react-native';
 import { Text, View, Screen, Card } from '@/components/Themed';
-import { supabase } from '@/services/supabase';
 import { Redirect, Stack, useRouter } from 'expo-router';
 import { Mail, Lock } from 'lucide-react-native';
 import { BrandLogo } from '@/components/BrandLogo';
 import { GoogleLogo } from '@/components/GoogleLogo';
 import { AppLegalFooter } from '@/components/AppLegalFooter';
+import { TurnstileWidget } from '@/components/support/TurnstileWidget';
+import { useColorScheme } from '@/components/useColorScheme';
 import { waitForAuthSession } from '@/services/authSession';
+import { hydrateAuthStoreFromSession } from '@/services/authState';
 import { getGoogleOAuthUnavailableReason, isGoogleOAuthEnabledForBuild, signInWithGoogle } from '@/services/oauth';
+import { signInWithPublicPassword } from '@/services/publicAuth';
 import { useAuthStore } from '@/store/authStore';
 import { WebAuthLayout } from '@/components/website/WebAuthLayout';
 
 type FeedbackTone = 'error' | 'success' | 'info';
+const TURNSTILE_SITE_KEY = String(process.env.EXPO_PUBLIC_TURNSTILE_SITE_KEY || '0x4AAAAAACp99RfEGJMIh-X3').trim();
 
 export default function LoginScreen() {
     const router = useRouter();
+    const colorScheme = useColorScheme();
     const { initialized, user } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [authAction, setAuthAction] = useState<'sign_in' | 'google' | null>(null);
     const [feedback, setFeedback] = useState<{ tone: FeedbackTone; text: string } | null>(null);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const [turnstileResetNonce, setTurnstileResetNonce] = useState(0);
     const googleEnabledForBuild = isGoogleOAuthEnabledForBuild();
     const googleUnavailableReason = getGoogleOAuthUnavailableReason();
     const nextRoute = Platform.OS === 'web' ? '/dashboard' : '/(tabs)';
@@ -65,6 +72,12 @@ export default function LoginScreen() {
         return message;
     };
 
+    const resetTurnstile = () => {
+        if (Platform.OS !== 'web') return;
+        setTurnstileToken(null);
+        setTurnstileResetNonce((current) => current + 1);
+    };
+
     const onSignIn = async () => {
         if (authAction) return;
         const normalizedEmail = normalizeEmail(email);
@@ -76,32 +89,34 @@ export default function LoginScreen() {
             showMessage('Error', 'Please enter a valid email address.', 'error');
             return;
         }
+        if (Platform.OS === 'web' && !turnstileToken) {
+            showMessage('Error', 'Complete the captcha before signing in.', 'error');
+            return;
+        }
 
         try {
             setFeedback(null);
             setAuthAction('sign_in');
-            const { data, error } = await withTimeout(supabase.auth.signInWithPassword({
+            const sessionResult = await withTimeout(signInWithPublicPassword({
                 email: normalizedEmail,
                 password,
+                turnstileToken,
             }));
 
-            if (error) {
-                showMessage('Sign in failed', mapAuthError(error.message), 'error');
-                return;
-            }
-
-            const session = data.session ?? await waitForAuthSession();
+            const session = sessionResult ?? await waitForAuthSession();
             if (!session) {
                 showMessage('Sign in failed', 'Your session did not finish loading. Please try again.', 'error');
                 return;
             }
 
+            await hydrateAuthStoreFromSession(session);
             setFeedback({ tone: 'success', text: 'Signed in successfully.' });
             router.replace(nextRoute as never);
         } catch (error: any) {
             showMessage('Sign in failed', error?.message || 'Unable to sign in right now. Please try again.', 'error');
         } finally {
             setAuthAction(null);
+            resetTurnstile();
         }
     };
 
@@ -185,10 +200,23 @@ export default function LoginScreen() {
                 <Text style={styles.forgotButtonText}>Forgot your password?</Text>
             </TouchableOpacity>
 
+            {Platform.OS === 'web' ? (
+                <RNView style={styles.captchaBlock}>
+                    <Text style={styles.captchaText}>Complete the bot check before Buddy Balance signs you in.</Text>
+                    <TurnstileWidget
+                        action="public_sign_in"
+                        onTokenChange={setTurnstileToken}
+                        resetNonce={turnstileResetNonce}
+                        siteKey={TURNSTILE_SITE_KEY}
+                        theme={colorScheme === 'dark' ? 'dark' : 'light'}
+                    />
+                </RNView>
+            ) : null}
+
             <TouchableOpacity
                 onPress={onSignIn}
-                disabled={!!authAction}
-                style={styles.primaryButton}
+                disabled={!!authAction || (Platform.OS === 'web' && !turnstileToken)}
+                style={[styles.primaryButton, (authAction || (Platform.OS === 'web' && !turnstileToken)) && styles.primaryButtonDisabled]}
             >
                 <Text style={styles.buttonText}>{authAction === 'sign_in' ? 'SIGNING IN...' : 'Sign In'}</Text>
             </TouchableOpacity>
@@ -377,12 +405,25 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
     },
+    primaryButtonDisabled: {
+        opacity: 0.72,
+    },
     secondaryButton: {
         padding: 18,
         borderRadius: 16,
         alignItems: 'center',
         marginTop: 8,
         backgroundColor: 'transparent',
+    },
+    captchaBlock: {
+        marginBottom: 12,
+        backgroundColor: 'transparent',
+    },
+    captchaText: {
+        marginBottom: 8,
+        fontSize: 12,
+        lineHeight: 18,
+        color: '#64748B',
     },
     googleButton: {
         marginTop: 8,

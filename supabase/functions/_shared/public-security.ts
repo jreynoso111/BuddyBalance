@@ -1,9 +1,4 @@
-type RateLimitEntry = {
-  count: number;
-  resetAt: number;
-};
-
-const rateLimitStore = new Map<string, RateLimitEntry>();
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 
 export type TurnstileVerificationResponse = {
   action?: string;
@@ -11,6 +6,17 @@ export type TurnstileVerificationResponse = {
   success?: boolean;
   ['error-codes']?: string[];
 };
+
+type RateLimitRpcRow = {
+  allowed: boolean;
+  remaining: number | null;
+  retry_after_ms: number | null;
+};
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+
+let rateLimitClient: ReturnType<typeof createClient> | null = null;
 
 export function parseList(raw: string) {
   return raw
@@ -70,29 +76,51 @@ export function getClientIp(req: Request) {
   return forwardedFor.split(',')[0]?.trim() || '';
 }
 
-export function checkRateLimit(options: {
+function getRateLimitClient() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Missing Supabase service role configuration for rate limiting.');
+  }
+
+  if (!rateLimitClient) {
+    rateLimitClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return rateLimitClient;
+}
+
+export async function checkRateLimit(options: {
   key: string;
   maxAttempts: number;
+  scope: string;
   windowMs: number;
 }) {
-  const now = Date.now();
-  const existing = rateLimitStore.get(options.key);
+  const client = getRateLimitClient();
+  const { data, error } = await client.rpc('check_public_rate_limit', {
+    p_scope: options.scope,
+    p_key: options.key,
+    p_max_attempts: options.maxAttempts,
+    p_window_ms: options.windowMs,
+  });
 
-  if (!existing || existing.resetAt <= now) {
-    rateLimitStore.set(options.key, {
-      count: 1,
-      resetAt: now + options.windowMs,
-    });
-    return { allowed: true, remaining: Math.max(options.maxAttempts - 1, 0) };
+  if (error) {
+    throw new Error(`Rate limit check failed: ${error.message}`);
   }
 
-  if (existing.count >= options.maxAttempts) {
-    return { allowed: false, remaining: 0, retryAfterMs: Math.max(existing.resetAt - now, 0) };
+  const row = (Array.isArray(data) ? data[0] : data) as RateLimitRpcRow | null;
+  if (!row || typeof row.allowed !== 'boolean') {
+    throw new Error('Rate limit check returned an invalid response.');
   }
 
-  existing.count += 1;
-  rateLimitStore.set(options.key, existing);
-  return { allowed: true, remaining: Math.max(options.maxAttempts - existing.count, 0) };
+  return {
+    allowed: row.allowed,
+    remaining: Math.max(Number(row.remaining || 0), 0),
+    retryAfterMs: row.retry_after_ms == null ? undefined : Math.max(Number(row.retry_after_ms), 0),
+  };
 }
 
 export function sanitizeRetryAfterSeconds(retryAfterMs?: number) {
@@ -105,6 +133,7 @@ export function isAllowedRedirect(redirectTo: string, allowedRedirects: string[]
 
   try {
     const normalized = new URL(redirectTo).toString();
+
     return allowedRedirects.some((candidate) => {
       try {
         return new URL(candidate).toString() === normalized;

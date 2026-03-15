@@ -33,12 +33,19 @@ npm run build:web
 
 La web ahora consulta datos autenticados de la app mediante endpoints en `api/`, en lugar de depender del código compartido con los proyectos móviles.
 
-## Contacto público y Turnstile
+## Flujos públicos y Turnstile
 
 Los flujos públicos del sitio usan Supabase Edge Functions:
 
 - `public-contact`
 - `public-auth`
+
+Cobertura actual:
+
+- `register` web
+- `forgot-password` web
+- `login` web para password sign-in
+- `contact` público web
 
 Secrets requeridos para la función:
 
@@ -48,11 +55,28 @@ PUBLIC_CONTACT_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance
 PUBLIC_AUTH_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance.net
 PUBLIC_AUTH_ALLOWED_RESET_REDIRECTS=https://buddybalance.net/reset-password,https://www.buddybalance.net/reset-password
 TURNSTILE_ALLOWED_HOSTNAMES=buddybalance.net,www.buddybalance.net
+ADMIN_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance.net
+ADMIN_ALLOWED_RESET_REDIRECTS=buddybalance://reset-password,https://buddybalance.net/reset-password,https://www.buddybalance.net/reset-password
 RESEND_API_KEY=...
 SUPPORT_TO_EMAIL=...
 SUPPORT_FROM_EMAIL=no-reply@buddybalance.net
 SUPPORT_FROM_NAME=Buddy Balance
 ```
+
+Notas:
+
+- Los allowlists ahora son estrictos por defecto. `localhost` ya no se acepta automáticamente.
+- Si quieres probar contra funciones remotas desde desarrollo, añade explícitamente tus orígenes y redirects de loopback solo en el entorno de dev, por ejemplo:
+  - `PUBLIC_AUTH_ALLOWED_ORIGINS=http://localhost:8082`
+  - `PUBLIC_CONTACT_ALLOWED_ORIGINS=http://localhost:8082`
+  - `PUBLIC_AUTH_ALLOWED_RESET_REDIRECTS=http://localhost:8082/reset-password`
+  - `TURNSTILE_ALLOWED_HOSTNAMES=localhost`
+- El rate limit público ahora depende de la RPC `public.check_public_rate_limit` y ya no usa memoria local del worker.
+- `revenuecat-sync` ahora falla cerrado si no configuras `REVENUECAT_WEBHOOK_AUTH_TOKEN`. Cuando actives RevenueCat, añade también:
+  - `REVENUECAT_SECRET_API_KEY`
+  - `REVENUECAT_WEBHOOK_AUTH_TOKEN`
+  - `REVENUECAT_ENTITLEMENT_ID`
+  - `REVENUECAT_ALLOWED_ORIGINS`
 
 Ejemplo de configuración y despliegue:
 
@@ -62,8 +86,11 @@ npx supabase secrets set --project-ref skxasszsdwtlsqlkukri \
   PUBLIC_CONTACT_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance.net \
   PUBLIC_AUTH_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance.net \
   PUBLIC_AUTH_ALLOWED_RESET_REDIRECTS=https://buddybalance.net/reset-password,https://www.buddybalance.net/reset-password \
-  TURNSTILE_ALLOWED_HOSTNAMES=buddybalance.net,www.buddybalance.net
+  TURNSTILE_ALLOWED_HOSTNAMES=buddybalance.net,www.buddybalance.net \
+  ADMIN_ALLOWED_ORIGINS=https://buddybalance.net,https://www.buddybalance.net \
+  ADMIN_ALLOWED_RESET_REDIRECTS=buddybalance://reset-password,https://buddybalance.net/reset-password,https://www.buddybalance.net/reset-password
 
 npx supabase functions deploy public-contact --project-ref skxasszsdwtlsqlkukri
 npx supabase functions deploy public-auth --project-ref skxasszsdwtlsqlkukri --no-verify-jwt
+npx supabase functions deploy admin-user-management --project-ref skxasszsdwtlsqlkukri --no-verify-jwt
 ```

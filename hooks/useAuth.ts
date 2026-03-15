@@ -200,18 +200,18 @@ export const useAuth = () => {
 
         // 2. Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
+            (event, session) => {
                 setSession(session);
                 setUser(session?.user ?? null);
 
                 if (session?.user?.id) {
-                    await syncProfileStateSafely(session.user.id);
+                    void syncProfileStateSafely(session.user.id);
                 } else {
                     setRole(null);
                     setPlanTier('free');
                     setLanguage(getDeviceLanguage());
                     // Prevent stale protected-route recovery after a sign-out.
-                    await AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
+                    void AsyncStorage.removeItem(LAST_PROTECTED_PATH_KEY);
                 }
 
                 if (event === 'SIGNED_OUT') {

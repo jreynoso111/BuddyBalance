@@ -118,6 +118,26 @@ Deno.serve(async (req) => {
       return json({ error: 'Invalid email address.' }, { allowedOrigins: PUBLIC_CONTACT_ALLOWED_ORIGINS, origin, status: 400 });
     }
 
+    const rateLimit = await checkRateLimit({
+      key: remoteIp
+        ? `public_contact:ip:${remoteIp}`
+        : `public_contact:email:${email}`,
+      maxAttempts: PUBLIC_CONTACT_RATE_LIMIT_MAX,
+      scope: 'public_contact',
+      windowMs: PUBLIC_CONTACT_RATE_LIMIT_WINDOW_MS,
+    });
+
+    if (!rateLimit.allowed) {
+      return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a moment and try again.' }), {
+        status: 429,
+        headers: {
+          ...getCorsHeaders(origin, PUBLIC_CONTACT_ALLOWED_ORIGINS),
+          'Content-Type': 'application/json',
+          'Retry-After': sanitizeRetryAfterSeconds(rateLimit.retryAfterMs),
+        },
+      });
+    }
+
     const emailDomain = email.split('@')[1] || '';
     if (!emailDomain || !(await domainAcceptsEmail(emailDomain))) {
       return json(
@@ -135,23 +155,6 @@ Deno.serve(async (req) => {
         { error: 'Captcha verification is required.' },
         { allowedOrigins: PUBLIC_CONTACT_ALLOWED_ORIGINS, origin, status: 400 },
       );
-    }
-
-    const rateLimit = checkRateLimit({
-      key: `public_contact:${remoteIp || 'unknown'}:${email}`,
-      maxAttempts: PUBLIC_CONTACT_RATE_LIMIT_MAX,
-      windowMs: PUBLIC_CONTACT_RATE_LIMIT_WINDOW_MS,
-    });
-
-    if (!rateLimit.allowed) {
-      return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a moment and try again.' }), {
-        status: 429,
-        headers: {
-          ...getCorsHeaders(origin, PUBLIC_CONTACT_ALLOWED_ORIGINS),
-          'Content-Type': 'application/json',
-          'Retry-After': sanitizeRetryAfterSeconds(rateLimit.retryAfterMs),
-        },
-      });
     }
 
     const turnstileResult = await verifyTurnstileToken({

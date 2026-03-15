@@ -30,6 +30,11 @@ const PUBLIC_AUTH_RATE_LIMIT_MAX = Number(Deno.env.get('PUBLIC_AUTH_RATE_LIMIT_M
 const PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS = Number(Deno.env.get('PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS') || 15 * 60 * 1000);
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const SUPPORTED_ACTIONS = new Set([
+  'send_registration_code',
+  'sign_in_with_password',
+  'send_password_reset',
+]);
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -92,6 +97,13 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!SUPPORTED_ACTIONS.has(action)) {
+      return json(
+        { error: 'Unsupported action.' },
+        { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 400 },
+      );
+    }
+
     if (!turnstileToken) {
       return json(
         { error: 'Captcha verification is required.' },
@@ -103,10 +115,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Invalid email address.' }, { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 400 });
     }
 
-    const rateKey = `${action}:${remoteIp || 'unknown'}:${email}`;
-    const rateLimit = checkRateLimit({
+    const rateKey = remoteIp
+      ? `public_auth:${action}:ip:${remoteIp}`
+      : `public_auth:${action}:email:${email}`;
+    const rateLimit = await checkRateLimit({
       key: rateKey,
       maxAttempts: PUBLIC_AUTH_RATE_LIMIT_MAX,
+      scope: action,
       windowMs: PUBLIC_AUTH_RATE_LIMIT_WINDOW_MS,
     });
 
@@ -155,6 +170,63 @@ Deno.serve(async (req) => {
       }
 
       return json({ ok: true, action }, { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 200 });
+    }
+
+    if (action === 'sign_in_with_password') {
+      const password = String(body?.password || '');
+
+      if (!password) {
+        return json(
+          { error: 'Password is required.' },
+          { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 400 },
+        );
+      }
+
+      const turnstile = await verifyTurnstileToken({
+        allowedHostnames: TURNSTILE_ALLOWED_HOSTNAMES,
+        expectedAction: 'public_sign_in',
+        remoteIp,
+        secretKey: TURNSTILE_SECRET_KEY,
+        token: turnstileToken,
+      });
+
+      if (!turnstile.ok) {
+        console.error('public-auth sign-in Turnstile failed:', turnstile.reason, turnstile.response);
+        return json(
+          { error: 'Captcha verification failed. Please try again.' },
+          { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 400 },
+        );
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        return json({ error: error.message }, { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 400 });
+      }
+
+      const accessToken = data.session?.access_token || '';
+      const refreshToken = data.session?.refresh_token || '';
+      if (!accessToken || !refreshToken) {
+        return json(
+          { error: 'Could not establish a session.' },
+          { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 500 },
+        );
+      }
+
+      return json(
+        {
+          ok: true,
+          action,
+          session: {
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          },
+        },
+        { allowedOrigins: PUBLIC_AUTH_ALLOWED_ORIGINS, origin, status: 200 },
+      );
     }
 
     if (action === 'send_password_reset') {

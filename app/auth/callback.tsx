@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Screen, Card, Text } from '@/components/Themed';
 import { waitForAuthSession } from '@/services/authSession';
+import { hydrateAuthStoreFromSession } from '@/services/authState';
 import { completeOAuthFromUrl } from '@/services/oauth';
 
 export default function AuthCallbackScreen() {
@@ -67,6 +68,7 @@ export default function AuthCallbackScreen() {
             return;
           }
 
+          await hydrateAuthStoreFromSession(session);
           setCompleted(true);
           setStatusText('Google account linked successfully.');
           router.replace(Platform.OS === 'web' ? '/dashboard' : '/(tabs)');

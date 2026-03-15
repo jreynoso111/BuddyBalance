@@ -239,6 +239,18 @@ export default function AccountDashboardScreen() {
   );
 
   React.useEffect(() => {
+    if (!user?.id) {
+      setStats(INITIAL_STATS);
+      setAllRecords([]);
+      setRecentRecords([]);
+      setLoading(false);
+      return;
+    }
+
+    void loadDashboard();
+  }, [loadDashboard, user?.id]);
+
+  React.useEffect(() => {
     if (!user?.id) return;
 
     const channel = supabase

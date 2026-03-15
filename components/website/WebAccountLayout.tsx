@@ -7,8 +7,7 @@ import { AppLegalFooter } from '@/components/AppLegalFooter';
 import { ThemeToggleButton } from '@/components/ThemeControls';
 import { Text } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
-import { clearPersistedAuthState, supabase } from '@/services/supabase';
-import { getDeviceLanguage } from '@/constants/i18n';
+import { redirectAfterSignOut, signOutAndResetAuthState } from '@/services/authState';
 import { getPlanLabel } from '@/services/subscriptionPlan';
 import { useAuthStore } from '@/store/authStore';
 
@@ -54,7 +53,7 @@ export function WebAccountLayout({
   const pathname = usePathname() || '/dashboard';
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const { user, role, planTier, setSession, setUser, setRole, setPlanTier, setLanguage } = useAuthStore();
+  const { user, role, planTier } = useAuthStore();
   const displayName =
     String(user?.user_metadata?.full_name || '').trim() ||
     String(user?.email || '').split('@')[0] ||
@@ -69,13 +68,11 @@ export function WebAccountLayout({
     : BASE_ACCOUNT_NAV;
 
   const signOut = async () => {
-    await supabase.auth.signOut().catch(() => null);
-    await clearPersistedAuthState().catch(() => null);
-    setSession(null);
-    setUser(null);
-    setRole(null);
-    setPlanTier('free');
-    setLanguage(getDeviceLanguage());
+    await signOutAndResetAuthState();
+    if (Platform.OS === 'web') {
+      redirectAfterSignOut('/');
+      return;
+    }
     router.replace('/');
   };
 

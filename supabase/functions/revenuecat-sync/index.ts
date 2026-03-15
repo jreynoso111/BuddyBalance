@@ -1,24 +1,23 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 
-import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getCorsHeaders,
+  getRequestOrigin,
+  isAllowedOrigin,
+  json,
+  parseList,
+} from '../_shared/public-security.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const REVENUECAT_SECRET_API_KEY = Deno.env.get('REVENUECAT_SECRET_API_KEY') || '';
 const REVENUECAT_ENTITLEMENT_ID = Deno.env.get('REVENUECAT_ENTITLEMENT_ID') || 'premium';
 const REVENUECAT_WEBHOOK_AUTH_TOKEN = Deno.env.get('REVENUECAT_WEBHOOK_AUTH_TOKEN') || '';
+const REVENUECAT_ALLOWED_ORIGINS = parseList(
+  Deno.env.get('REVENUECAT_ALLOWED_ORIGINS') || 'https://buddybalance.net,https://www.buddybalance.net',
+);
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-function json(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json',
-    },
-  });
-}
 
 function parseBearerToken(req: Request) {
   const header = req.headers.get('Authorization') || req.headers.get('authorization') || '';
@@ -114,16 +113,30 @@ async function updateProfilePlan(appUserId: string, planTier: 'free' | 'premium'
 }
 
 Deno.serve(async (req) => {
+  const origin = getRequestOrigin(req);
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    if (origin && !isAllowedOrigin(origin, REVENUECAT_ALLOWED_ORIGINS)) {
+      return json({ error: 'Origin not allowed.' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 403 });
+    }
+
+    return new Response('ok', { headers: getCorsHeaders(origin, REVENUECAT_ALLOWED_ORIGINS) });
+  }
+
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed.' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 405 });
+  }
+
+  if (origin && !isAllowedOrigin(origin, REVENUECAT_ALLOWED_ORIGINS)) {
+    return json({ error: 'Origin not allowed.' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 403 });
   }
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json({ error: 'Missing Supabase function secrets.' }, 500);
+    return json({ error: 'Missing Supabase function secrets.' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 500 });
   }
 
   if (!REVENUECAT_SECRET_API_KEY) {
-    return json({ error: 'Missing REVENUECAT_SECRET_API_KEY.' }, 503);
+    return json({ error: 'Missing REVENUECAT_SECRET_API_KEY.' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 503 });
   }
 
   try {
@@ -134,24 +147,34 @@ Deno.serve(async (req) => {
     let appUserId = '';
     let source = 'webhook';
 
-    if (token && (!REVENUECAT_WEBHOOK_AUTH_TOKEN || token !== REVENUECAT_WEBHOOK_AUTH_TOKEN)) {
+    if (token && token !== REVENUECAT_WEBHOOK_AUTH_TOKEN) {
       const { data, error } = await supabaseAdmin.auth.getUser(token);
       if (error || !data.user?.id) {
-        return json({ error: 'Unauthorized' }, 401);
+        return json({ error: 'Unauthorized' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 401 });
       }
 
       appUserId = data.user.id;
       source = 'client';
     } else {
-      if (REVENUECAT_WEBHOOK_AUTH_TOKEN && token !== REVENUECAT_WEBHOOK_AUTH_TOKEN) {
-        return json({ error: 'Unauthorized webhook request' }, 401);
+      if (!REVENUECAT_WEBHOOK_AUTH_TOKEN) {
+        return json(
+          { error: 'RevenueCat webhook auth is not configured.' },
+          { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 503 },
+        );
+      }
+
+      if (token !== REVENUECAT_WEBHOOK_AUTH_TOKEN) {
+        return json(
+          { error: 'Unauthorized webhook request' },
+          { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 401 },
+        );
       }
 
       appUserId = String(event?.app_user_id || body?.app_user_id || '').trim();
     }
 
     if (!appUserId) {
-      return json({ error: 'Missing app_user_id' }, 400);
+      return json({ error: 'Missing app_user_id' }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 400 });
     }
 
     const subscriberResponse = await fetchRevenueCatSubscriber(appUserId);
@@ -160,14 +183,17 @@ Deno.serve(async (req) => {
 
     await updateProfilePlan(appUserId, planTier);
 
-    return json({
-      ok: true,
-      source,
-      appUserId,
-      planTier,
-    });
+    return json(
+      {
+        ok: true,
+        source,
+        appUserId,
+        planTier,
+      },
+      { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 200 },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return json({ error: message }, 500);
+    return json({ error: message }, { allowedOrigins: REVENUECAT_ALLOWED_ORIGINS, origin, status: 500 });
   }
 });
