@@ -133,6 +133,7 @@ export default function AccountDashboardScreen() {
   const [recentExpanded, setRecentExpanded] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const compactWeb = Platform.OS === 'web' && width < 820;
+  const narrowPanels = Platform.OS === 'web' && width < 1080;
   const isDark = colorScheme === 'dark';
   const quickLinks = [
     { label: 'Contacts', href: '/contacts' },
@@ -539,8 +540,15 @@ export default function AccountDashboardScreen() {
         </Pressable>
       </RNView>
 
-      <Card style={[styles.panelCard, styles.stackedPanelCard, compactWeb && styles.panelCardCompact]}>
-        <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
+      <Card
+        style={[
+          styles.panelCard,
+          styles.stackedPanelCard,
+          narrowPanels && styles.panelCardSeparated,
+          compactWeb && styles.panelCardCompact,
+        ]}
+      >
+        <RNView style={[styles.recentHeader, narrowPanels && styles.recentHeaderCompact]}>
           <RNView>
             <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Open records</Text>
             <Text style={[styles.panelBody, isDark && styles.panelBodyDark]}>
@@ -625,8 +633,15 @@ export default function AccountDashboardScreen() {
         )}
       </Card>
 
-      <Card style={[styles.panelCard, styles.stackedPanelCard, compactWeb && styles.panelCardCompact]}>
-        <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
+      <Card
+        style={[
+          styles.panelCard,
+          styles.stackedPanelCard,
+          narrowPanels && styles.panelCardSeparated,
+          compactWeb && styles.panelCardCompact,
+        ]}
+      >
+        <RNView style={[styles.recentHeader, narrowPanels && styles.recentHeaderCompact]}>
           <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Recent records</Text>
           <Pressable
             onPress={() => setRecentExpanded((current) => !current)}
@@ -965,6 +980,9 @@ const styles = StyleSheet.create({
     width: '100%',
     minWidth: 0,
   },
+  panelCardSeparated: {
+    marginTop: 12,
+  },
   panelTitle: {
     fontSize: 20,
     fontWeight: '900',
@@ -1077,6 +1095,7 @@ const styles = StyleSheet.create({
   recentHeaderCompact: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+    width: '100%',
   },
   sectionActionButton: {
     minHeight: 38,
