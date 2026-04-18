@@ -12,6 +12,31 @@ type PublicAuthSignInResponse = {
   };
 };
 
+async function getFunctionErrorMessage(error: any, fallback: string) {
+  const fallbackMessage = String(error?.message || fallback || '').trim() || fallback;
+  const context = error?.context;
+
+  if (!context || typeof context.text !== 'function') {
+    return fallbackMessage;
+  }
+
+  try {
+    const response = typeof context.clone === 'function' ? context.clone() : context;
+    const raw = await response.text();
+    if (!raw) return fallbackMessage;
+
+    try {
+      const parsed = JSON.parse(raw);
+      const message = String(parsed?.error || parsed?.message || '').trim();
+      return message || fallbackMessage;
+    } catch {
+      return raw.trim() || fallbackMessage;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 export async function sendPublicRegistrationCode(options: {
   email: string;
   fullName: string;
@@ -45,7 +70,7 @@ export async function sendPublicRegistrationCode(options: {
   });
 
   if (error) {
-    throw new Error(error.message || 'Could not send the verification code.');
+    throw new Error(await getFunctionErrorMessage(error, 'Could not send the verification code.'));
   }
 }
 
@@ -76,7 +101,7 @@ export async function sendPublicPasswordReset(options: {
   });
 
   if (error) {
-    throw new Error(error.message || 'Could not send the recovery email.');
+    throw new Error(await getFunctionErrorMessage(error, 'Could not send the recovery email.'));
   }
 }
 
@@ -108,7 +133,7 @@ export async function signInWithPublicPassword(options: {
   });
 
   if (error) {
-    throw new Error(error.message || 'Could not sign in right now.');
+    throw new Error(await getFunctionErrorMessage(error, 'Could not sign in right now.'));
   }
 
   const accessToken = data?.session?.access_token || '';

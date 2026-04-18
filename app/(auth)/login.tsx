@@ -68,6 +68,21 @@ export default function LoginScreen() {
         if (normalized.includes('email not confirmed')) {
             return 'Your email is not confirmed yet. Check your inbox and confirm your account first. If you do not see the message, review your spam or junk folder.';
         }
+        if (normalized.includes('origin not allowed')) {
+            return 'This login is only allowed from the approved Buddy Balance web domain.';
+        }
+        if (normalized.includes('captcha verification failed')) {
+            return 'Captcha verification failed. Complete it again and try signing in one more time.';
+        }
+        if (normalized.includes('missing public auth configuration')) {
+            return 'The web login service is missing required server configuration.';
+        }
+        if (normalized.includes('rate limit check failed')) {
+            return 'The web login service is missing required rate-limit configuration on the server.';
+        }
+        if (normalized.includes('could not process the public auth request')) {
+            return 'The web login service failed on the server. Check the public-auth Edge Function configuration.';
+        }
 
         return message;
     };
@@ -113,7 +128,7 @@ export default function LoginScreen() {
             setFeedback({ tone: 'success', text: 'Signed in successfully.' });
             router.replace(nextRoute as never);
         } catch (error: any) {
-            showMessage('Sign in failed', error?.message || 'Unable to sign in right now. Please try again.', 'error');
+            showMessage('Sign in failed', mapAuthError(error?.message || 'Unable to sign in right now. Please try again.'), 'error');
         } finally {
             setAuthAction(null);
             resetTurnstile();
