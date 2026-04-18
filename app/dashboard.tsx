@@ -129,6 +129,7 @@ export default function AccountDashboardScreen() {
   const [allRecords, setAllRecords] = React.useState<LoanRecord[]>([]);
   const [recentRecords, setRecentRecords] = React.useState<LoanRecord[]>([]);
   const [recordFilter, setRecordFilter] = React.useState<DashboardRecordFilter | null>('open');
+  const [openExpanded, setOpenExpanded] = React.useState(false);
   const [recentExpanded, setRecentExpanded] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const compactWeb = Platform.OS === 'web' && width < 820;
@@ -538,7 +539,7 @@ export default function AccountDashboardScreen() {
         </Pressable>
       </RNView>
 
-      <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
+      <Card style={[styles.panelCard, styles.stackedPanelCard, compactWeb && styles.panelCardCompact]}>
         <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
           <RNView>
             <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Open records</Text>
@@ -546,22 +547,42 @@ export default function AccountDashboardScreen() {
               {getFilterLabel(recordFilter)}: {filteredRecords.length}
             </Text>
           </RNView>
-          <Pressable
-            onPress={() => setRecordFilter('open')}
-            style={({ hovered, pressed }) => [
-              styles.inlineActionButton,
-              hovered && (isDark ? styles.inlineActionButtonHoveredDark : styles.inlineActionButtonHovered),
-              pressed && styles.inlineActionButtonPressed,
-            ]}
-          >
-            <Text style={[styles.refreshText, isDark && styles.refreshTextDark]}>Show all</Text>
-          </Pressable>
+          <RNView style={[styles.panelActions, compactWeb && styles.panelActionsCompact]}>
+            <Pressable
+              onPress={() => setRecordFilter('open')}
+              style={({ hovered, pressed }) => [
+                styles.inlineActionButton,
+                hovered && (isDark ? styles.inlineActionButtonHoveredDark : styles.inlineActionButtonHovered),
+                pressed && styles.inlineActionButtonPressed,
+              ]}
+            >
+              <Text style={[styles.refreshText, isDark && styles.refreshTextDark]}>Show all</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setOpenExpanded((current) => !current)}
+              style={({ hovered, pressed }) => [
+                styles.sectionActionButton,
+                isDark && styles.sectionActionButtonDark,
+                hovered && (isDark ? styles.sectionActionButtonHoveredDark : styles.sectionActionButtonHovered),
+                pressed && styles.inlineActionButtonPressed,
+              ]}
+            >
+              <Text style={styles.sectionActionButtonText}>{openExpanded ? 'Collapse' : 'Expand'}</Text>
+            </Pressable>
+          </RNView>
         </RNView>
 
         {loading ? (
           <RNView style={styles.loadingState}>
             <ActivityIndicator size="small" color={isDark ? '#E2E8F0' : '#4F46E5'} />
             <Text style={[styles.loadingText, isDark && styles.loadingTextDark]}>Loading records...</Text>
+          </RNView>
+        ) : !openExpanded ? (
+          <RNView style={[styles.emptyState, isDark && styles.emptyStateDark]}>
+            <Text style={[styles.emptyTitle, isDark && styles.emptyTitleDark]}>Open records are minimized.</Text>
+            <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
+              Expand this section when you want to review the records that are still active in this view.
+            </Text>
           </RNView>
         ) : filteredRecords.length === 0 ? (
           <RNView style={[styles.emptyState, isDark && styles.emptyStateDark]}>
@@ -604,24 +625,21 @@ export default function AccountDashboardScreen() {
         )}
       </Card>
 
-      <Card style={[styles.panelCard, compactWeb && styles.panelCardCompact]}>
+      <Card style={[styles.panelCard, styles.stackedPanelCard, compactWeb && styles.panelCardCompact]}>
         <RNView style={[styles.recentHeader, compactWeb && styles.recentHeaderCompact]}>
           <Text style={[styles.panelTitle, isDark && styles.panelTitleDark]}>Recent records</Text>
           <Pressable
             onPress={() => setRecentExpanded((current) => !current)}
             style={({ hovered, pressed }) => [
-              styles.sectionToggle,
+              styles.sectionActionButton,
               styles.interactiveButtonInline,
-              hovered && (isDark ? styles.inlineActionButtonHoveredDark : styles.inlineActionButtonHovered),
+              isDark && styles.sectionActionButtonDark,
+              hovered && (isDark ? styles.sectionActionButtonHoveredDark : styles.sectionActionButtonHovered),
               pressed && styles.inlineActionButtonPressed,
             ]}
           >
-            <Text style={[styles.refreshText, isDark && styles.refreshTextDark]}>{recentExpanded ? 'Hide' : `${recentRecords.length} records`}</Text>
-            {recentExpanded ? (
-              <ChevronUp size={16} color={isDark ? '#E2E8F0' : '#4F46E5'} />
-            ) : (
-              <ChevronDown size={16} color={isDark ? '#E2E8F0' : '#4F46E5'} />
-            )}
+            <Text style={styles.sectionActionButtonText}>{recentExpanded ? 'Collapse' : 'Expand'}</Text>
+            {recentExpanded ? <ChevronUp size={16} color="#FFFFFF" /> : <ChevronDown size={16} color="#FFFFFF" />}
           </Pressable>
         </RNView>
 
@@ -814,6 +832,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  panelActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  panelActionsCompact: {
+    width: '100%',
+  },
   inlineActionButton: {
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -933,6 +960,11 @@ const styles = StyleSheet.create({
     width: '100%',
     minWidth: 0,
   },
+  stackedPanelCard: {
+    flex: 0,
+    width: '100%',
+    minWidth: 0,
+  },
   panelTitle: {
     fontSize: 20,
     fontWeight: '900',
@@ -1045,6 +1077,33 @@ const styles = StyleSheet.create({
   recentHeaderCompact: {
     flexDirection: 'column',
     alignItems: 'flex-start',
+  },
+  sectionActionButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#2563EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sectionActionButtonDark: {
+    backgroundColor: '#1D4ED8',
+  },
+  sectionActionButtonHovered: {
+    backgroundColor: '#1D4ED8',
+    transform: [{ translateY: -1 }],
+  },
+  sectionActionButtonHoveredDark: {
+    backgroundColor: '#2563EB',
+    transform: [{ translateY: -1 }],
+  },
+  sectionActionButtonText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   refreshText: {
     fontSize: 13,
